@@ -210,9 +210,10 @@ Section timepiece.
       (forall (states : list S),
           length states = length neighbors ->
           inductive_condition_untimed n initial (buntil b (before u) (after u))
-              (map (fun (p : Node * (S * φ)) => (fst p, fst (snd p), snd (snd p)))
-                 (combine (map fst neighbors)
-                    (zip_boolean_untils (map snd neighbors) B states)))).
+              (* need a list (Node * S * φ) *)
+              (combine (combine (map fst neighbors) states)
+                 (map (fun p => buntil (fst p) (before u) (after u))
+                    (combine B (map snd neighbors))))).
 
   Lemma ind_vc_until_implies_boolean_ind_vc :
     forall (n : Node) (initial : S) (b : bool) (tau : nat) (before after : φ)
@@ -236,22 +237,42 @@ Section timepiece.
     apply (until_has_equivalent_buntil _ _ _ before' after') in Hn_bound.
     rewrite <- Hn_bound.
     replace (map fst (combine neighbors neighbor_invariants)) with neighbors.
-    2: { admit. (* easy *) }
+    2: {
+      simpl.
+      apply (map_project_combine1 neighbors neighbor_invariants id) in Hnbrlen.
+      rewrite <- map_map in Hnbrlen.
+      rewrite map_id in Hnbrlen.
+      rewrite map_id in Hnbrlen.
+      congruence. }
     simpl.
     replace (map snd (combine neighbors neighbor_invariants)) with neighbor_invariants.
-    2: { admit. (* again, easy *) }
+    2: {
+      apply (map_project_combine2 neighbors neighbor_invariants id) in Hnbrlen.
+      rewrite <- map_map in Hnbrlen.
+      rewrite map_id in Hnbrlen.
+      rewrite map_id in Hnbrlen.
+      congruence. }
     rewrite combine_length in *.
     rewrite Hnbrlen in *.
     rewrite map_length in Hindvc.
     rewrite PeanoNat.Nat.min_id in *.
     apply (Hindvc t states) in Hstateslen.
-    assert (H: (map (fun c : Node * S * A => (fst c, snd c t))
-                    (map (fun c : Node * A * S => (fst (fst c), snd c, snd (fst c)))
-                       (combine
-                          (combine neighbors (map construct_until neighbor_invariants))
-                          states))) = (map (fun p : Node * (S * φ) => (fst p, fst (snd p), snd (snd p)))
-       (combine neighbors (zip_boolean_untils neighbor_invariants B states)))).
-    { admit. (* annoying *) }
+    rewrite map_map in Hstateslen.
+    assert (H: (map
+                    (fun x : Node * A * S =>
+                     (fst (fst (fst x), snd x, snd (fst x)), snd (fst (fst x), snd x, snd (fst x)) t))
+                    (combine (combine neighbors (map construct_until neighbor_invariants)) states)) =
+                 (combine (combine neighbors states)
+       (map (fun p : bool * Until => buntil (fst p) before' after') (combine B neighbor_invariants)))).
+    {
+      replace neighbors with (map id neighbors).
+      2: { apply map_id. }
+      rewrite <- map_combine.
+      simpl.
+      (* *)
+      admit.
+    (* annoying *)
+    }
     rewrite <- H.
     assumption.
   Admitted.
