@@ -4,56 +4,6 @@ Require Import Coq.Lists.List.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
 
-Lemma map_combine :
-  forall {T1 T2 T3 T4 : Type} (l1 : list T1) (l2 : list T2) (f1 : T1 -> T3) (f2 : T2 -> T4),
-    map (fun p => (f1 (fst p), f2 (snd p))) (combine l1 l2) =
-      combine (map f1 l1) (map f2 l2).
-  Proof.
-    intros; generalize dependent l2.
-    induction l1; auto.
-    intros l2.
-    rewrite map_cons.
-    induction l2; auto.
-    simpl.
-    rewrite IHl1. reflexivity.
-Qed.
-
-Lemma combine_equal :
-  forall {T1 T2 : Type} (l1 l11 : list T1) (l2 l22 : list T2),
-    l1 = l11 -> l2 = l22 -> combine l1 l2 = combine l11 l22.
-  Proof. intros. subst. reflexivity. Qed.
-
-Lemma map_project_combine1 :
-  forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
-    length l1 = length l2 ->
-    map (fun p => f (fst p)) (combine l1 l2) = map f l1.
-  Proof.
-    intros. generalize dependent l2.
-    induction l1; auto.
-    intros l2 Hlength.
-    induction l2.
-    - inversion Hlength.
-    - inversion Hlength.
-      apply IHl1 in H0. rewrite map_cons.
-      rewrite <- H0.
-      simpl. reflexivity.
-Qed.
-
-Lemma map_project_combine2 :
-  forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T2 -> T3),
-    length l1 = length l2 ->
-    map (fun p => f (snd p)) (combine l1 l2) = map f l2.
-  Proof.
-    intros. generalize dependent l1.
-    induction l2.
-    - intros l1 Hlength. inversion Hlength. simpl. rewrite combine_nil. reflexivity.
-    - induction l1; intros Hlength; inversion Hlength.
-      rewrite map_cons.
-      apply IHl2 in H0.
-      rewrite <- H0.
-      simpl. reflexivity.
-Qed.
-
 Section timepiece.
   Variable S : Type.
 
@@ -177,13 +127,11 @@ Section timepiece.
 
   Definition boolean_inductive_condition
     (n : Node) (initial : S) (b : bool) (u : Until)
-    (neighbors : list Node) (neighbor_invariants : list Until) :=
-    forall (B : list bool),
-      length B = length neighbor_invariants ->
+    (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool) :=
       (* associate the booleans with the neighbor witness times *)
-      (exists (t : nat), booleans_are_time_bounds
-                    (combine B (map (fun nbr => tau nbr) neighbor_invariants)) t
-      /\ boolean_equals_time_bound b (1 + t) (tau u)) ->
+      forall (t : nat),
+        booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
+        boolean_equals_time_bound b (1 + t) (tau u) ->
       (* define the inductive condition check again, but now using booleans *)
       (forall (states : list S),
           length states = length neighbors ->
@@ -195,13 +143,13 @@ Section timepiece.
 
   Lemma ind_vc_until_implies_boolean_ind_vc :
     forall (n : Node) (initial : S) (b : bool) (tau : nat) (node_before node_after : φ)
-      (neighbors : list Node) (neighbor_invariants : list Until),
-      (* node_invariant = until node_tau nbefore nafter -> *)
+      (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool),
       length neighbors = length neighbor_invariants ->
+        length B = length neighbor_invariants ->
       inductive_condition n initial (until tau node_before node_after)
         neighbors (map construct_until neighbor_invariants) ->
       boolean_inductive_condition n initial b (mkUntil tau node_before node_after)
-        neighbors neighbor_invariants.
+        neighbors neighbor_invariants B.
   Proof.
     unfold
       inductive_condition,
@@ -209,7 +157,7 @@ Section timepiece.
       booleans_are_time_bounds.
     simpl.
     intros n initial b tau' node_before node_after.
-    intros neighbors neighbor_invariants Hnbrlen Hindvc B Hblen [t [Hnbr_bounds Hn_bound]] states Hstateslen.
+    intros neighbors neighbor_invariants B Hnbrlen Hblen Hindvc t Hnbr_bounds Hn_bound states Hstateslen.
     (* match up the until and buntil *)
     apply (until_has_equivalent_buntil _ _ _ node_before node_after) in Hn_bound.
     rewrite <- Hn_bound.
@@ -221,19 +169,28 @@ Section timepiece.
     assumption.
   Qed.
 
-  Lemma boolean_ind_vc_until_implies_ind_vc :
-    forall (n : Node) (initial : S) (b : bool) (tau : nat) (before after : φ)
-      (neighbors : list Node) (neighbor_invariants : list Until),
-      (* node_invariant = until node_tau nbefore nafter -> *)
-      length neighbors = length neighbor_invariants ->
-      boolean_inductive_condition n initial b (mkUntil tau before after)
-        neighbors neighbor_invariants ->
-      inductive_condition n initial (until tau before after)
-        neighbors (map construct_until neighbor_invariants).
-  Proof.
-  intros n initial b tau' before' after' neighbors neighbor_invariants Hnbrlen.
-  intros Hbindvc.
-  unfold inductive_condition.
-  intros t states Hlenstates.
-  Admitted.
+  Lemma boolean_ind_vc_until_implies_ind_vc_aux :
+    forall n initial b tau' before' after' neighbors neighbor_invariants B t,
+      length B = length neighbor_invariants ->
+      booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
+      boolean_equals_time_bound b (Datatypes.S t) tau' ->
+      (forall (states : list S),
+          length states = length neighbors ->
+          inductive_condition_untimed n initial (buntil b before' after')
+            (combine neighbors states)
+            (* construct the neighbor invariants with booleans *)
+            (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))) ->
+      forall states : list S,
+        length states = length neighbors ->
+        inductive_condition_untimed n initial (until tau' before' after' (1 + t)) (combine neighbors states)
+          (map (fun x : Until => construct_until x t) neighbor_invariants).
+    Proof.
+      intros.
+      specialize (H2 states).
+      apply H2 in H3.
+      rewrite (untils_have_equivalent_buntils neighbor_invariants B t); try congruence.
+      rewrite (until_has_equivalent_buntil b).
+      2: { simpl. assumption. }
+      assumption.
+    Qed.
 End timepiece.
