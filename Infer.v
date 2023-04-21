@@ -33,6 +33,37 @@ Proof.
     + apply IHl. eapply Forall_inv_tail. apply H.
 Qed.
 
+Lemma map_project_combine1 :
+  forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
+    length l1 = length l2 ->
+    map (fun p => f (fst p)) (combine l1 l2) = map f l1.
+  Proof.
+    intros. generalize dependent l2.
+    induction l1; auto.
+    intros l2 Hlength.
+    induction l2.
+    - inversion Hlength.
+    - inversion Hlength.
+      apply IHl1 in H0. rewrite map_cons.
+      rewrite <- H0.
+      simpl. reflexivity.
+Qed.
+
+Lemma map_project_combine2 :
+  forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T2 -> T3),
+    length l1 = length l2 ->
+    map (fun p => f (snd p)) (combine l1 l2) = map f l2.
+  Proof.
+    intros. generalize dependent l1.
+    induction l2.
+    - intros l1 Hlength. inversion Hlength. simpl. rewrite combine_nil. reflexivity.
+    - induction l1; intros Hlength; inversion Hlength.
+      rewrite map_cons.
+      apply IHl2 in H0.
+      rewrite <- H0.
+      simpl. reflexivity.
+Qed.
+
 Section timepiece.
   Variable S : Type.
 
@@ -207,44 +238,24 @@ Section timepiece.
     replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : Node => A m t) neighbors).
     2: {
       clear - HneighborsUntil Hnbrlen.
-      assert (Forall (fun p => fst p = snd p)
-                (combine (map (fun m => A m) neighbors) (map (fun u => construct_until u) neighbor_invariants))).
-      - rewrite <- map_combine.
-        simpl.
-        apply Forall_map.
-        simpl.
-        assert (H: (fun x => A (fst x) = construct_until (snd x)) = (fun x => forall t, (compose A fst) x t = (compose construct_until snd) x t)).
-        { apply functional_extensionality.
-          intro x.
-          replace (A (fst x) = construct_until (snd x)) with (forall t1, A (fst x) t1 = construct_until (snd x) t1).
-          reflexivity.
-        }
-        assumption.
-        apply functional_extensionality.
-        intro x.
-        assert (H: (forall t0 : nat, compose A fst x t0 = compose construct_until snd x t0) <-> (compose A fst x = compose construct_until snd x)).
-        + split.
-          * apply functional_extensionality.
-          * intro. rewrite H. auto.
-        + destruct H as [H1 H2].
-          rewrite H0.
-        reflexivity.
-        extensionality.
-        rewrite <- (equal_f ((compose A fst) x) ((compose construct_until snd x))).
-        rewrite (functional_extensionality (compose A fst) (compose construct_until snd)).
-        { simpl. }
-      - simpl.
-        replace (forall t : nat, A (fst p) t = construct_until (snd p) t) with (forall t : nat, A (fst p) = construct_until (snd p)) in HneighborsUntil. functional_extensionality in HneighborsUntil.
-        apply map_ext_Forall in H.
+      rewrite <- (map_project_combine1 neighbors neighbor_invariants (fun m => A m t) Hnbrlen).
+      rewrite <- (map_project_combine2 neighbors neighbor_invariants (fun u => construct_until u t) Hnbrlen).
+      apply map_ext_Forall.
+      assert (H: forall n u, invariant_is_until n u -> A n = construct_until u).
+      { intros. unfold invariant_is_until in H. apply functional_extensionality. apply H. }
+      (* TODO *)
+      admit.
     }
     assumption.
-  Qed.
+  Admitted.
 
   (** Proof that the boolean inductive condition implies the inductive condition
       when the premises of the boolean inductive condition are met.
    *)
   Lemma boolean_ind_vc_until_implies_ind_vc_aux :
     forall n b tau' before' after' neighbors neighbor_invariants B t,
+      invariant_is_until n (mkUntil tau' before' after') ->
+      Forall (fun p => invariant_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
       length B = length neighbor_invariants ->
       booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
@@ -255,7 +266,8 @@ Section timepiece.
           (map (fun x : Until => construct_until x t) neighbor_invariants).
     Proof.
       intros.
-      apply (H2 t H0 H1 states) in H3.
+      unfold boolean_inductive_condition in H4.
+      apply (H4 H H0 t H2 H3 states) in H5.
       rewrite (untils_have_equivalent_buntils neighbor_invariants B t); try congruence.
       rewrite (until_has_equivalent_buntil b).
       2: { simpl. assumption. }
