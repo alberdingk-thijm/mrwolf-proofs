@@ -5,34 +5,6 @@ Require Import Coq.Program.Basics.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
 
-Lemma map_combine :
-  forall {T1 T2 T3 T4 : Type} (l1 : list T1) (l2 : list T2) (f1 : T1 -> T3) (f2 : T2 -> T4),
-    map (fun p => (f1 (fst p), f2 (snd p))) (combine l1 l2) =
-      combine (map f1 l1) (map f2 l2).
-  Proof.
-    intros; generalize dependent l2.
-    induction l1; auto.
-    intros l2.
-    rewrite map_cons.
-    induction l2; auto.
-    simpl.
-    rewrite IHl1. reflexivity.
-Qed.
-
-Lemma Forall_map :
-  forall {T1 T2 : Type} (l : list T1) (f : T1 -> T2) (g : T2 -> Prop),
-    Forall g (map f l) <-> Forall (fun x => g (f x)) l.
-Proof.
-  induction l; intros; split; intro; auto.
-  - apply Forall_nil.
-  - rewrite map_cons in H. apply Forall_cons.
-    + apply Forall_inv in H. assumption.
-    + apply IHl. eapply Forall_inv_tail. apply H.
-  - simpl. apply Forall_cons.
-    + apply Forall_inv in H. assumption.
-    + apply IHl. eapply Forall_inv_tail. apply H.
-Qed.
-
 Lemma map_project_combine1 :
   forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
     length l1 = length l2 ->
@@ -217,7 +189,7 @@ Section timepiece.
       inductive_condition n neighbors ->
       boolean_inductive_condition n b (mkUntil tau node_before node_after)
         neighbors neighbor_invariants B.
-  Proof.
+  Proof using Type.
     unfold
       inductive_condition,
       boolean_inductive_condition,
@@ -238,10 +210,13 @@ Section timepiece.
     replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : Node => A m t) neighbors).
     2: {
       clear - HneighborsUntil Hnbrlen.
+      rewrite Forall_forall in HneighborsUntil.
+      (* join the two lists together *)
       rewrite <- (map_project_combine1 neighbors neighbor_invariants (fun m => A m t) Hnbrlen).
       rewrite <- (map_project_combine2 neighbors neighbor_invariants (fun u => construct_until u t) Hnbrlen).
+      (* now convert to a Forall *)
       apply map_ext_Forall.
-      rewrite Forall_forall in HneighborsUntil.
+      (* convert again with Forall_forall *)
       apply Forall_forall.
       intros x H.
       apply (HneighborsUntil x H t).
@@ -264,7 +239,7 @@ Section timepiece.
         length states = length neighbors ->
         inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
           (map (fun x : Until => construct_until x t) neighbor_invariants).
-    Proof.
+    Proof using Type.
       intros.
       unfold boolean_inductive_condition in H4.
       apply (H4 H H0 t H2 H3 states) in H5.
