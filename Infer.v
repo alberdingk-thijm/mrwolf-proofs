@@ -202,6 +202,8 @@ Section timepiece.
     rewrite <- Hblen.
     apply (Hindvc t states) in Hstateslen.
     unfold invariant_is_until in *.
+    unfold construct_until in HnUntil. simpl in HnUntil.
+    rewrite <- HnUntil.
     replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : Node => A m t) neighbors).
     2: {
       clear - HneighborsUntil Hnbrlen.
@@ -234,11 +236,6 @@ Section timepiece.
       - simpl.
         replace (forall t : nat, A (fst p) t = construct_until (snd p) t) with (forall t : nat, A (fst p) = construct_until (snd p)) in HneighborsUntil. functional_extensionality in HneighborsUntil.
         apply map_ext_Forall in H.
-    }
-    replace (until tau' node_before node_after (Datatypes.S t)) with (A n (Datatypes.S t)).
-    2: {
-      clear - HnUntil.
-      unfold construct_until in HnUntil. simpl in HnUntil. congruence.
     }
     assumption.
   Qed.
