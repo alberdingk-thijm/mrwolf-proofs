@@ -241,13 +241,13 @@ Section timepiece.
       rewrite <- (map_project_combine1 neighbors neighbor_invariants (fun m => A m t) Hnbrlen).
       rewrite <- (map_project_combine2 neighbors neighbor_invariants (fun u => construct_until u t) Hnbrlen).
       apply map_ext_Forall.
-      assert (H: forall n u, invariant_is_until n u -> A n = construct_until u).
-      { intros. unfold invariant_is_until in H. apply functional_extensionality. apply H. }
-      (* TODO *)
-      admit.
+      rewrite Forall_forall in HneighborsUntil.
+      apply Forall_forall.
+      intros x H.
+      apply (HneighborsUntil x H t).
     }
     assumption.
-  Admitted.
+  Qed.
 
   (** Proof that the boolean inductive condition implies the inductive condition
       when the premises of the boolean inductive condition are met.
