@@ -36,6 +36,25 @@ Lemma map_project_combine2 :
       simpl. reflexivity.
 Qed.
 
+Lemma Forall_forall2 :
+  forall { T1 T2 : Type } (R : T1 -> T2 -> Prop) (l1 : list T1) (l2 : list T2),
+    length l1 = length l2 ->
+    Forall2 (fun x y => R x y) l1 l2 <-> Forall (fun p => R (fst p) (snd p)) (combine l1 l2).
+Proof.
+  intros.
+  generalize dependent l2.
+  induction l1.
+  - intros. induction l2; repeat constructor. inversion H.
+  - intros. induction l2.
+    + inversion H.
+    + split.
+      * intro. simpl. inversion H0. constructor.
+        { assumption. }
+        { apply IHl1. inversion H. reflexivity. assumption. }
+      * intro. inversion H0. constructor. simpl in H3. assumption.
+        apply IHl1. inversion H. reflexivity. assumption.
+Qed.
+
 Section timepiece.
   Variable S : Type.
 
@@ -94,7 +113,7 @@ Section timepiece.
     (neighbors : list (Node * S)) (neighbor_invariants : list φ) :=
     length neighbors = length neighbor_invariants ->
     (* if every neighbor's route satisfies the invariant φ *)
-    (Forall (fun (c : Node * S * φ) => ((snd c) (snd (fst c)))) (combine neighbors neighbor_invariants)) ->
+    (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
     (* then the node's invariant holds on the updated state *)
     (node_invariant (updated_state node neighbors)).
 
@@ -123,8 +142,8 @@ Section timepiece.
   Qed.
 
   (* associate all the boolean * witness time pairs *)
-  Definition booleans_are_time_bounds (BTs : list (bool * nat)) (t : nat) : Prop :=
-    Forall (fun bt => boolean_equals_time_bound (fst bt) t (snd bt)) BTs.
+  Definition booleans_are_time_bounds (B : list bool)  (T : list nat) (t : nat) : Prop :=
+    Forall2 (fun b tau => boolean_equals_time_bound b t tau) B T.
 
   (** For all until invariants, if every invariant has an associated boolean B,
       then the list of invariants is equal to the associated list of boolean untils. *)
@@ -132,7 +151,7 @@ Section timepiece.
     forall (neighbor_invariants : list Until) (B : list bool) (t : nat),
       length B = length neighbor_invariants ->
       (* if every boolean is associated with a time bound, *)
-      booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
+      booleans_are_time_bounds B (map tau neighbor_invariants) t ->
         (* then a list of invariants with explicit times *)
         map (fun u => (construct_until u) t) neighbor_invariants =
           (* equals a list of invariants with Bs *)
@@ -148,10 +167,10 @@ Section timepiece.
         simpl in *.
         inversion H0.
         simpl in H4.
-        apply (until_has_equivalent_buntil _ _ _ (before a) (after a)) in H4.
+        apply (until_has_equivalent_buntil _ _ _ (before a) (after a)) in H5.
         unfold construct_until.
         subst.
-        rewrite H4.
+        rewrite H5.
         f_equal.
         apply IHneighbor_invariants.
         * assumption.
@@ -166,10 +185,10 @@ Section timepiece.
     (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool) :=
       (* enforce that all invariants are Untils *)
       A_is_until n u ->
-      Forall (fun p => A_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
+      Forall2 (fun m p => A_is_until m p) neighbors neighbor_invariants ->
       (* associate the booleans with the neighbor witness times *)
       forall (t : nat),
-        booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
+        booleans_are_time_bounds B (map tau neighbor_invariants) t ->
         boolean_equals_time_bound b (1 + t) (tau u) ->
       (* define the inductive condition check again, but now using booleans *)
       (forall (states : list S),
@@ -217,7 +236,11 @@ Section timepiece.
       (* now convert to a Forall *)
       apply map_ext_Forall.
       eapply Forall_impl.
-      2: apply HneighborsUntil.
+      2: {
+        apply Forall_forall2 in HneighborsUntil.
+        apply HneighborsUntil.
+        assumption.
+      }
       intros a H.
       apply (H t).
     }
@@ -230,9 +253,9 @@ Section timepiece.
   Lemma boolean_ind_vc_until_implies_ind_vc_aux :
     forall n b tau' before' after' neighbors neighbor_invariants B t,
       A_is_until n (mkUntil tau' before' after') ->
-      Forall (fun p => A_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
+      Forall2 (fun m p => A_is_until m p) neighbors neighbor_invariants ->
       length B = length neighbor_invariants ->
-      booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
+      booleans_are_time_bounds B (map tau neighbor_invariants) t ->
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
       boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
       forall states : list S,
