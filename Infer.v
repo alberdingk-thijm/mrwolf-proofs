@@ -158,15 +158,15 @@ Section timepiece.
         * assumption.
   Qed.
 
-  Definition invariant_is_until (n : Node) (u : Until) :=
+  Definition A_is_until (n : Node) (u : Until) :=
     forall t, A n t = construct_until u t.
 
   Definition boolean_inductive_condition
     (n : Node) (b : bool) (u : Until)
     (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool) :=
       (* enforce that all invariants are Untils *)
-      invariant_is_until n u ->
-      Forall (fun p => invariant_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
+      A_is_until n u ->
+      Forall (fun p => A_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
       (* associate the booleans with the neighbor witness times *)
       forall (t : nat),
         booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
@@ -204,22 +204,22 @@ Section timepiece.
     2: { assumption. }
     rewrite <- Hblen.
     apply (Hindvc t states) in Hstateslen.
-    unfold invariant_is_until in *.
-    unfold construct_until in HnUntil. simpl in HnUntil.
+    unfold A_is_until in *.
+    unfold construct_until in HnUntil.
+    simpl in HnUntil.
     rewrite <- HnUntil.
     replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : Node => A m t) neighbors).
     2: {
       clear - HneighborsUntil Hnbrlen.
-      rewrite Forall_forall in HneighborsUntil.
       (* join the two lists together *)
       rewrite <- (map_project_combine1 neighbors neighbor_invariants (fun m => A m t) Hnbrlen).
       rewrite <- (map_project_combine2 neighbors neighbor_invariants (fun u => construct_until u t) Hnbrlen).
       (* now convert to a Forall *)
       apply map_ext_Forall.
-      (* convert again with Forall_forall *)
-      apply Forall_forall.
-      intros x H.
-      apply (HneighborsUntil x H t).
+      eapply Forall_impl.
+      2: apply HneighborsUntil.
+      intros a H.
+      apply (H t).
     }
     assumption.
   Qed.
@@ -229,8 +229,8 @@ Section timepiece.
    *)
   Lemma boolean_ind_vc_until_implies_ind_vc_aux :
     forall n b tau' before' after' neighbors neighbor_invariants B t,
-      invariant_is_until n (mkUntil tau' before' after') ->
-      Forall (fun p => invariant_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
+      A_is_until n (mkUntil tau' before' after') ->
+      Forall (fun p => A_is_until (fst p) (snd p)) (combine neighbors neighbor_invariants) ->
       length B = length neighbor_invariants ->
       booleans_are_time_bounds (combine B (map tau neighbor_invariants)) t ->
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
