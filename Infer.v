@@ -133,7 +133,7 @@ Section timepiece.
     forall (b : bool) (t tau : nat) (φ1 φ2 : φ),
       boolean_equals_time_bound b t tau ->
       (until tau φ1 φ2) t = (buntil b φ1 φ2).
-  Proof.
+  Proof using Type.
     intros.
     extensionality s.
     unfold boolean_equals_time_bound in H.
@@ -157,7 +157,7 @@ Section timepiece.
           (* equals a list of invariants with Bs *)
           map (fun bu => buntil (fst bu) (before (snd bu)) (after (snd bu)))
             (combine B neighbor_invariants).
-  Proof.
+  Proof using Type.
     intros neighbor_invariants.
     induction neighbor_invariants.
     - intros. rewrite combine_nil. reflexivity.
@@ -185,7 +185,7 @@ Section timepiece.
     (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool) :=
       (* enforce that all invariants are Untils *)
       A_is_until n u ->
-      Forall2 (fun m p => A_is_until m p) neighbors neighbor_invariants ->
+      Forall2 A_is_until neighbors neighbor_invariants ->
       (* associate the booleans with the neighbor witness times *)
       forall (t : nat),
         booleans_are_time_bounds B (map tau neighbor_invariants) t ->
@@ -253,11 +253,12 @@ Section timepiece.
   Lemma boolean_ind_vc_until_implies_ind_vc_aux :
     forall n b tau' before' after' neighbors neighbor_invariants B t,
       A_is_until n (mkUntil tau' before' after') ->
-      Forall2 (fun m p => A_is_until m p) neighbors neighbor_invariants ->
+      Forall2 A_is_until neighbors neighbor_invariants ->
       length B = length neighbor_invariants ->
       booleans_are_time_bounds B (map tau neighbor_invariants) t ->
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
       boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
+      (* inductive condition for the same time [t] as above *)
       forall states : list S,
         length states = length neighbors ->
         inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
