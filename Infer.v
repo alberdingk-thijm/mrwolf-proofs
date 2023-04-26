@@ -4,6 +4,7 @@ Require Import Coq.Lists.List.
 Require Import Coq.Program.Basics.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
+Require Import Coq.Structures.Orders.
 
 Lemma map_project_combine1 :
   forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
@@ -55,19 +56,19 @@ Proof.
         apply IHl1. inversion H. reflexivity. assumption.
 Qed.
 
-Section timepiece.
-  Variable S : Type.
+Module Type Net.
+  Parameter S : Type.
 
   Definition Node := nat.
   Definition Edge : Type := (Node * Node).
 
-  Variable Merge : S -> S -> S.
-  Variable F : Edge -> S -> S.
-  Variable I : Node -> S.
+  Parameter Merge : S -> S -> S.
+  Parameter F : Edge -> S -> S.
+  Parameter I : Node -> S.
 
   Definition φ := S -> Prop.
   Definition Q := nat -> φ.
-  Variable A : Node -> Q.
+  Parameter A : Node -> Q.
 
   (* Computing a new route at a node given routes of its neighbors. *)
   Definition updated_state (node : Node)
@@ -272,4 +273,59 @@ Section timepiece.
       2: { simpl. assumption. }
       assumption.
     Qed.
-End timepiece.
+
+  Definition selectivity :=
+    forall (s1 s2 : S), Merge s1 s2 = s1 \/ Merge s1 s2 = s2.
+
+  Definition better_than_or_equal (s1 s2 : S) :=
+    Merge s1 s2 = s1.
+
+  Notation "s1 ' ⪯ ' s2" := (better_than_or_equal s1 s2) (at level 20).
+
+  Definition better_than (s1 s2 : S) :=
+    better_than_or_equal s1 s2 /\ s1 <> s2.
+
+  Notation "s1 ' ≺ ' s2" := (better_than s1 s2) (at level 20).
+
+  Definition merge_associativity :=
+    (forall s1 s2 s3, Merge (Merge s1 s2) s3 = Merge s1 (Merge s2 s3)).
+
+  Lemma better_than_is_transitive :
+    merge_associativity ->
+    forall s1 s2 s3,
+      better_than_or_equal s1 s2 ->
+      better_than_or_equal s2 s3 ->
+      better_than_or_equal s1 s3.
+  Proof using Type.
+    unfold better_than_or_equal.
+    intros.
+    rewrite <- H0.
+    rewrite H.
+    rewrite H1.
+    reflexivity.
+  Qed.
+
+  Lemma infimum_exists :
+    merge_associativity -> selectivity ->
+    forall (states : list S), (exists (s : S), In s states -> (forall (s' : S), better_than_or_equal s s')).
+  Proof.
+    unfold selectivity.
+    intros Hassoc Hselect states.
+    induction states.
+    - simpl. eexists. contradiction.
+    - destruct IHstates as [s IHs].
+      specialize (Hselect a s).
+      destruct Hselect as [Habetter | Hsbetter].
+      + exists a. intros Hin. intros s'. unfold better_than_or_equal.
+        eapply better_than_is_transitive.
+        apply Hassoc.
+        apply Habetter.
+        apply IHs.
+        admit.
+      + exists s. intros Hin. intros s'. admit.
+  Admitted.
+
+End Net.
+
+(* Module Type SelectiveNet (S : OrderedType) <: Net. *)
+(* End SelectiveNet. *)
