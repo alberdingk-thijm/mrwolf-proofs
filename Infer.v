@@ -5,6 +5,8 @@ Require Import Coq.Program.Basics.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
 Require Import Coq.Structures.Orders.
+Require Import Coq.Structures.OrdersLists.
+Require Import Coq.Structures.GenericMinMax.
 
 Lemma map_project_combine1 :
   forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
@@ -56,27 +58,54 @@ Proof.
         apply IHl1. inversion H. reflexivity. assumption.
 Qed.
 
-Module Type Net.
-  Parameter S : Type.
+Module Type Graph.
+  Parameter V : Type.
+  Definition E : Type := V * V.
+End Graph.
 
-  Definition Node := nat.
-  Definition Edge : Type := (Node * Node).
+Module Type Net (S: Typ).
+  (* Parameter S : Type. *)
+  Include Graph.
 
-  Parameter Merge : S -> S -> S.
-  Parameter F : Edge -> S -> S.
-  Parameter I : Node -> S.
+  Parameter Merge : S.t -> S.t -> S.t.
+  Parameter F : E -> S.t -> S.t.
+  Parameter I : V -> S.t.
 
-  Definition φ := S -> Prop.
+  Axiom merge_associativity : forall s1 s2 s3, Merge (Merge s1 s2) s3 = Merge s1 (Merge s2 s3).
+  Axiom merge_commutativity : forall s1 s2, Merge s1 s2 = Merge s2 s1.
+
+  (* interface and predicate definitions *)
+  Definition φ := S.t -> Prop.
   Definition Q := nat -> φ.
-  Parameter A : Node -> Q.
+  Parameter A : V -> Q.
 
   (* Computing a new route at a node given routes of its neighbors. *)
-  Definition updated_state (node : Node)
-    (neighbors : list (Node * S)) : S :=
-    fold_right (fun (neighbor : (Node * S)) (st : S) =>
+  Definition updated_state (node : V) (neighbors : list (V * S.t)) : S.t :=
+    fold_right (fun (neighbor : (V * S.t)) (st : S.t) =>
                   let (m, ms) := neighbor in
                   Merge st (F (m, node) ms)) (I node) neighbors.
 
+  (* A helper definition for writing out the inductive condition with times
+     erased: all invariants are specified as [S.t -> Prop] functions. *)
+  Definition inductive_condition_untimed
+    (node : V) (node_invariant : φ)
+    (neighbors : list (V * S.t)) (neighbor_invariants : list φ) :=
+    length neighbors = length neighbor_invariants ->
+    (* if every neighbor's route satisfies the invariant φ *)
+    (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
+    (* then the node's invariant holds on the updated state *)
+    (node_invariant (updated_state node neighbors)).
+
+  (* The original inductive condition for a node [n]. *)
+  Definition inductive_condition (n : V) (neighbors : list V) :=
+    forall (t : nat) (states : list S.t),
+      length states = length neighbors ->
+      inductive_condition_untimed
+        n (A n (1 + t))
+        (combine neighbors states) (map (fun m => A m t) neighbors).
+End Net.
+
+Module Type UntilNet (S: Typ) (Import N: Net S).
   (* The until temporal operator. *)
   Definition until (tau : nat) (before after : φ) : Q :=
     fun t s => if t <? tau then before s else after s.
@@ -104,27 +133,8 @@ Module Type Net.
   Definition construct_until (u : Until) : Q :=
     until (tau u) (before u) (after u).
 
-  (* Review of how fst/snd work with tuples of > 2 elements. *)
-  Compute (snd (fst (1, 2, 3))). (* --> 2 *)
-
-  (* A helper definition for writing out the inductive condition with times
-     erased: all invariants are specified as [S -> Prop] functions. *)
-  Definition inductive_condition_untimed
-    (node : Node) (node_invariant : φ)
-    (neighbors : list (Node * S)) (neighbor_invariants : list φ) :=
-    length neighbors = length neighbor_invariants ->
-    (* if every neighbor's route satisfies the invariant φ *)
-    (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
-    (* then the node's invariant holds on the updated state *)
-    (node_invariant (updated_state node neighbors)).
-
-  (* The original inductive condition for a node [n]. *)
-  Definition inductive_condition (n : Node) (neighbors : list Node) :=
-    forall (t : nat) (states : list S),
-      length states = length neighbors ->
-      inductive_condition_untimed
-        n (A n (1 + t))
-        (combine neighbors states) (map (fun m => A m t) neighbors).
+  Definition A_is_until (n : V) (u : Until) :=
+    forall t, A n t = construct_until u t.
 
   Definition boolean_equals_time_bound (b : bool) (t tau : nat) :=
     b = (t <? tau).
@@ -178,12 +188,9 @@ Module Type Net.
         * assumption.
   Qed.
 
-  Definition A_is_until (n : Node) (u : Until) :=
-    forall t, A n t = construct_until u t.
-
   Definition boolean_inductive_condition
-    (n : Node) (b : bool) (u : Until)
-    (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool) :=
+    (n : V) (b : bool) (u : Until)
+    (neighbors : list V) (neighbor_invariants : list Until) (B : list bool) :=
       (* enforce that all invariants are Untils *)
       A_is_until n u ->
       Forall2 A_is_until neighbors neighbor_invariants ->
@@ -192,7 +199,7 @@ Module Type Net.
         booleans_are_time_bounds B (map tau neighbor_invariants) t ->
         boolean_equals_time_bound b (1 + t) (tau u) ->
       (* define the inductive condition check again, but now using booleans *)
-      (forall (states : list S),
+      (forall (states : list S.t),
           length states = length neighbors ->
           inductive_condition_untimed
             n (buntil b (before u) (after u))
@@ -202,8 +209,8 @@ Module Type Net.
 
   (** Proof that the inductive condition implies the boolean inductive condition. *)
   Lemma ind_vc_until_implies_boolean_ind_vc :
-    forall (n : Node) (b : bool) (tau : nat) (node_before node_after : φ)
-      (neighbors : list Node) (neighbor_invariants : list Until) (B : list bool),
+    forall (n : V) (b : bool) (tau : nat) (node_before node_after : φ)
+      (neighbors : list V) (neighbor_invariants : list Until) (B : list bool),
       length neighbors = length neighbor_invariants ->
       length B = length neighbor_invariants ->
       inductive_condition n neighbors ->
@@ -228,7 +235,7 @@ Module Type Net.
     unfold construct_until in HnUntil.
     simpl in HnUntil.
     rewrite <- HnUntil.
-    replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : Node => A m t) neighbors).
+    replace (map (fun u : Until => construct_until u t) neighbor_invariants) with (map (fun m : V => A m t) neighbors).
     2: {
       clear - HneighborsUntil Hnbrlen.
       (* join the two lists together *)
@@ -260,7 +267,7 @@ Module Type Net.
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
       boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
       (* inductive condition for the same time [t] as above *)
-      forall states : list S,
+      forall states : list S.t,
         length states = length neighbors ->
         inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
           (map (fun x : Until => construct_until x t) neighbor_invariants).
@@ -273,59 +280,28 @@ Module Type Net.
       2: { simpl. assumption. }
       assumption.
     Qed.
+End UntilNet.
 
-  Definition selectivity :=
-    forall (s1 s2 : S), Merge s1 s2 = s1 \/ Merge s1 s2 = s2.
+Module Type SelectiveNet (Import S : OrderedTypeFull) (Import N: Net S).
+  Include GenericMinMax S.
+  Include OrderedTypeLists S.
+  Definition better := S.le.
+  Definition strictly_better := S.lt.
 
-  Definition better_than_or_equal (s1 s2 : S) :=
-    Merge s1 s2 = s1.
+  Axiom merge_selectivity : forall s1 s2, better s1 s2 -> Merge s1 s2 = s1.
 
-  Notation "s1 ' ⪯ ' s2" := (better_than_or_equal s1 s2) (at level 20).
+  Infix "⪯" := better (at level 20).
+  Infix "≺" := strictly_better (at level 20).
 
-  Definition better_than (s1 s2 : S) :=
-    better_than_or_equal s1 s2 /\ s1 <> s2.
+  Definition better_inv (φ1 φ2 : φ) :=
+    forall s1 s2, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
 
-  Notation "s1 ' ≺ ' s2" := (better_than s1 s2) (at level 20).
-
-  Definition merge_associativity :=
-    (forall s1 s2 s3, Merge (Merge s1 s2) s3 = Merge s1 (Merge s2 s3)).
-
-  Lemma better_than_is_transitive :
-    merge_associativity ->
-    forall s1 s2 s3,
-      better_than_or_equal s1 s2 ->
-      better_than_or_equal s2 s3 ->
-      better_than_or_equal s1 s3.
-  Proof using Type.
-    unfold better_than_or_equal.
-    intros.
-    rewrite <- H0.
-    rewrite H.
-    rewrite H1.
-    reflexivity.
-  Qed.
-
-  Lemma infimum_exists :
-    merge_associativity -> selectivity ->
-    forall (states : list S), (exists (s : S), In s states -> (forall (s' : S), better_than_or_equal s s')).
+  Example better_inv1 :
+    forall s1 s2, s1 ⪯ s2 -> better_inv (fun s => s = s1) (fun s => s = s2).
   Proof.
-    unfold selectivity.
-    intros Hassoc Hselect states.
-    induction states.
-    - simpl. eexists. contradiction.
-    - destruct IHstates as [s IHs].
-      specialize (Hselect a s).
-      destruct Hselect as [Habetter | Hsbetter].
-      + exists a. intros Hin. intros s'. unfold better_than_or_equal.
-        eapply better_than_is_transitive.
-        apply Hassoc.
-        apply Habetter.
-        apply IHs.
-        admit.
-      + exists s. intros Hin. intros s'. admit.
-  Admitted.
-
-End Net.
-
-(* Module Type SelectiveNet (S : OrderedType) <: Net. *)
-(* End SelectiveNet. *)
+    intros s1 s2 Hle.
+    unfold better_inv.
+    intros s0 s3 Hle1 Hle2.
+    congruence.
+  Qed.
+End SelectiveNet.
