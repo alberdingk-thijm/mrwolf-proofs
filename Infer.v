@@ -58,38 +58,34 @@ Proof.
         apply IHl1. inversion H. reflexivity. assumption.
 Qed.
 
-Module Type Graph.
-  Parameter V : Type.
+Section Net.
+  Parameter S : Type.
+  Definition V := nat.
   Definition E : Type := V * V.
-End Graph.
 
-Module Type Net (S: Typ).
-  (* Parameter S : Type. *)
-  Include Graph.
-
-  Parameter Merge : S.t -> S.t -> S.t.
-  Parameter F : E -> S.t -> S.t.
-  Parameter I : V -> S.t.
+  Parameter Merge : S -> S -> S.
+  Parameter F : E -> S -> S.
+  Parameter I : V -> S.
 
   Axiom merge_associativity : forall s1 s2 s3, Merge (Merge s1 s2) s3 = Merge s1 (Merge s2 s3).
   Axiom merge_commutativity : forall s1 s2, Merge s1 s2 = Merge s2 s1.
 
   (* interface and predicate definitions *)
-  Definition φ := S.t -> Prop.
+  Definition φ := S -> Prop.
   Definition Q := nat -> φ.
   Parameter A : V -> Q.
 
   (* Computing a new route at a node given routes of its neighbors. *)
-  Definition updated_state (node : V) (neighbors : list (V * S.t)) : S.t :=
-    fold_right (fun (neighbor : (V * S.t)) (st : S.t) =>
+  Definition updated_state (node : V) (neighbors : list (V * S)) : S :=
+    fold_right (fun (neighbor : (V * S)) (st : S) =>
                   let (m, ms) := neighbor in
                   Merge st (F (m, node) ms)) (I node) neighbors.
 
   (* A helper definition for writing out the inductive condition with times
-     erased: all invariants are specified as [S.t -> Prop] functions. *)
+     erased: all invariants are specified as [S -> Prop] functions. *)
   Definition inductive_condition_untimed
     (node : V) (node_invariant : φ)
-    (neighbors : list (V * S.t)) (neighbor_invariants : list φ) :=
+    (neighbors : list (V * S)) (neighbor_invariants : list φ) :=
     length neighbors = length neighbor_invariants ->
     (* if every neighbor's route satisfies the invariant φ *)
     (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
@@ -98,14 +94,14 @@ Module Type Net (S: Typ).
 
   (* The original inductive condition for a node [n]. *)
   Definition inductive_condition (n : V) (neighbors : list V) :=
-    forall (t : nat) (states : list S.t),
+    forall (t : nat) (states : list S),
       length states = length neighbors ->
       inductive_condition_untimed
         n (A n (1 + t))
         (combine neighbors states) (map (fun m => A m t) neighbors).
 End Net.
 
-Module Type UntilNet (S: Typ) (Import N: Net S).
+Section UntilNet.
   (* The until temporal operator. *)
   Definition until (tau : nat) (before after : φ) : Q :=
     fun t s => if t <? tau then before s else after s.
@@ -199,7 +195,7 @@ Module Type UntilNet (S: Typ) (Import N: Net S).
         booleans_are_time_bounds B (map tau neighbor_invariants) t ->
         boolean_equals_time_bound b (1 + t) (tau u) ->
       (* define the inductive condition check again, but now using booleans *)
-      (forall (states : list S.t),
+      (forall (states : list S),
           length states = length neighbors ->
           inductive_condition_untimed
             n (buntil b (before u) (after u))
@@ -267,7 +263,7 @@ Module Type UntilNet (S: Typ) (Import N: Net S).
       boolean_equals_time_bound b (Datatypes.S t) tau' ->
       boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
       (* inductive condition for the same time [t] as above *)
-      forall states : list S.t,
+      forall states : list S,
         length states = length neighbors ->
         inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
           (map (fun x : Until => construct_until x t) neighbor_invariants).
@@ -282,16 +278,17 @@ Module Type UntilNet (S: Typ) (Import N: Net S).
     Qed.
 End UntilNet.
 
-Module Type SelectiveNet (Import S : OrderedTypeFull) (Import N: Net S).
-  Include GenericMinMax S.
-  Include OrderedTypeLists S.
-  Definition better := S.le.
-  Definition strictly_better := S.lt.
+Section SelectiveNet.
+  Axiom merge_selectivity : forall s1 s2, Merge s1 s2 = s1 \/ Merge s1 s2 = s2.
 
-  Axiom merge_selectivity : forall s1 s2, better s1 s2 -> Merge s1 s2 = s1.
+  Definition better_or_eq (s1 s2 : S) :=
+    Merge s1 s2 = s1.
 
-  Infix "⪯" := better (at level 20).
-  Infix "≺" := strictly_better (at level 20).
+  Definition better (s1 s2 : S) :=
+    better_or_eq s1 s2 /\ s1 <> s2.
+
+  Infix "⪯" := better_or_eq (at level 20).
+  Infix "≺" := better (at level 20).
 
   Definition better_inv (φ1 φ2 : φ) :=
     forall s1 s2, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
