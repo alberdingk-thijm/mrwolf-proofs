@@ -310,25 +310,17 @@ Section UntilNet.
     forall n b tau' before' after' neighbors neighbor_invariants B,
       length neighbors = length neighbor_invariants ->
       length B = length neighbor_invariants ->
-      (* enforce that all invariants are Untils *)
       A_is_until n (mkUntil tau' before' after') ->
       Forall2 A_is_until neighbors neighbor_invariants ->
-      (* associate the booleans with the neighbor witness times *)
       (forall t, booleans_are_time_bounds B (map tau neighbor_invariants) t) ->
       (forall t, boolean_equals_time_bound b (1 + t) tau') ->
-      (forall (states : list S),
-          length states = length neighbors ->
-          inductive_condition_untimed
-            n (buntil b before' after')
-            (combine neighbors states)
-            (* construct the neighbor invariants with booleans *)
-            (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))) ->
+      boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
        inductive_condition n neighbors.
   Proof.
     intros n b tau' before' after' neighbors neighbor_invariants B Hnbrlen Hblen HnUntil HnbrUntil HnbrBounds HnBound Hbindvc.
     unfold inductive_condition.
     intros t states Hstateslen.
-    apply (Hbindvc states) in Hstateslen.
+    apply (Hbindvc _ HnUntil HnbrUntil (HnbrBounds t) (HnBound t) states) in Hstateslen.
     rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t) in Hstateslen.
     - rewrite <- (until_has_equivalent_buntil b (1 + t) tau') in Hstateslen.
       + rewrite HnUntil.
