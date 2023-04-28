@@ -58,6 +58,30 @@ Proof.
         apply IHl1. inversion H. reflexivity. assumption.
 Qed.
 
+Lemma map_ext_curried_Forall2 :
+  forall { T1 T2 T3 T4 : Type }
+    (l1 : list T1) (l2 : list T2)
+    (f1 : T1 -> T3 -> T4) (f2 : T2 -> T3 -> T4) (w : T3),
+    length l1 = length l2 ->
+    (* if all invariants are Untils *)
+    Forall2 (fun x y => forall z, f1 x z = f2 y z) l1 l2 ->
+    (* then mapping the *)
+    map (fun x => f1 x w) l1 = map (fun y => f2 y w) l2.
+Proof.
+  intros.
+  (* join the two lists together *)
+  rewrite <- (map_project_combine1 _ _ _ H).
+  rewrite <- (map_project_combine2 _ _ _ H).
+  (* now convert to a Forall *)
+  apply map_ext_Forall.
+  apply (Forall_forall2 _ _ _ H) in H0.
+  eapply Forall_impl.
+  intros.
+  2: apply H0.
+  simpl in H1.
+  apply H1.
+Qed.
+
 Section Net.
   Parameter S : Type.
   Definition V := nat.
@@ -168,20 +192,16 @@ Section UntilNet.
     intros neighbor_invariants.
     induction neighbor_invariants.
     - intros. rewrite combine_nil. reflexivity.
-    - intros. induction B.
-      + inversion H.
-      + inversion H.
-        simpl in *.
-        inversion H0.
-        simpl in H4.
-        apply (until_has_equivalent_buntil _ _ _ (before a) (after a)) in H5.
-        unfold construct_until.
-        subst.
-        rewrite H5.
-        f_equal.
-        apply IHneighbor_invariants.
-        * assumption.
-        * assumption.
+    - intros. induction B; inversion H.
+      simpl in *.
+      inversion H0.
+      simpl in H4.
+      apply (until_has_equivalent_buntil _ _ _ (before a) (after a)) in H5.
+      unfold construct_until.
+      subst.
+      rewrite H5.
+      f_equal.
+      apply IHneighbor_invariants; assumption.
   Qed.
 
   Definition boolean_inductive_condition_premises
@@ -208,27 +228,6 @@ Section UntilNet.
             (* construct the neighbor invariants with booleans *)
             (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))).
 
-  Lemma relate_A_to_invariants :
-    forall neighbors neighbor_invariants t,
-      length neighbors = length neighbor_invariants ->
-      (* enforce that all invariants are Untils *)
-      Forall2 A_is_until neighbors neighbor_invariants ->
-    map (fun m : V => A m t) neighbors = map (fun u : Until => construct_until u t) neighbor_invariants.
-  Proof.
-    intros.
-    (* join the two lists together *)
-    rewrite <- (map_project_combine1 _ _ _ H).
-    rewrite <- (map_project_combine2 _ _ _ H).
-    (* now convert to a Forall *)
-    apply map_ext_Forall.
-    apply (Forall_forall2 _ _ _ H) in H0.
-    eapply Forall_impl.
-    intros.
-    2: apply H0.
-    simpl in H1.
-    apply H1.
-  Qed.
-
   (** Proof that the inductive condition implies the boolean inductive condition. *)
   Lemma ind_vc_until_implies_boolean_ind_vc :
     forall (n : V) (b : bool) (tau : nat) (node_before node_after : φ)
@@ -249,16 +248,13 @@ Section UntilNet.
     (* match up the until and buntil *)
     apply (until_has_equivalent_buntil _ _ _ node_before node_after) in Hn_bound.
     rewrite <- Hn_bound.
-    apply (untils_have_equivalent_buntils neighbor_invariants B t) in Hblen.
-    2: { assumption. }
-    rewrite <- Hblen.
+    apply (untils_have_equivalent_buntils neighbor_invariants B t Hblen) in Hnbr_bounds.
+    rewrite <- Hnbr_bounds.
     apply (Hindvc t states) in Hstateslen.
-    unfold A_is_until in *.
-    unfold construct_until in HnUntil.
-    simpl in HnUntil.
+    unfold A_is_until, construct_until in HnUntil.
     rewrite <- HnUntil.
-    rewrite <- (relate_A_to_invariants _ _ _ Hnbrlen HneighborsUntil).
-    assumption.
+    rewrite <- (map_ext_curried_Forall2 _ _ _ _ _ Hnbrlen HneighborsUntil).
+    apply Hstateslen.
   Qed.
 
   (** Proof that the boolean inductive condition implies the inductive condition
@@ -275,8 +271,8 @@ Section UntilNet.
         inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
           (map (fun x : Until => construct_until x t) neighbor_invariants)).
     Proof using Type.
-      intros n b tau' before' after' neighbors neighbor_invariants B t.
-      intros HBlen HnUntil HneighborsUntil Hnbr_bounds Hn_bound Hbindvc states Hstateslen.
+      intros n b tau' before' after' neighbors neighbor_invariants B t
+        HBlen HnUntil HneighborsUntil Hnbr_bounds Hn_bound Hbindvc states Hstateslen.
       unfold boolean_inductive_condition in Hbindvc.
       apply (Hbindvc t HnUntil HneighborsUntil Hnbr_bounds Hn_bound states) in Hstateslen.
       rewrite (untils_have_equivalent_buntils neighbor_invariants B t); try congruence.
@@ -317,18 +313,15 @@ Section UntilNet.
       boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
        inductive_condition n neighbors.
   Proof.
-    intros n b tau' before' after' neighbors neighbor_invariants B Hnbrlen Hblen HnUntil HnbrUntil HnbrBounds HnBound Hbindvc.
     unfold inductive_condition.
-    intros t states Hstateslen.
+    intros n b tau' before' after' neighbors neighbor_invariants B Hnbrlen Hblen HnUntil HnbrUntil HnbrBounds HnBound Hbindvc
+         t states Hstateslen.
     apply (Hbindvc _ HnUntil HnbrUntil (HnbrBounds t) (HnBound t) states) in Hstateslen.
-    rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t) in Hstateslen.
-    - rewrite <- (until_has_equivalent_buntil b (1 + t) tau') in Hstateslen.
-      + rewrite HnUntil.
-        rewrite (relate_A_to_invariants neighbors neighbor_invariants t Hnbrlen HnbrUntil).
-        apply Hstateslen.
-      + apply HnBound.
-    - apply Hblen.
-    - apply HnbrBounds.
+    rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t Hblen (HnbrBounds t)) in Hstateslen.
+    rewrite <- (until_has_equivalent_buntil b (1 + t) tau' _ _ (HnBound t)) in Hstateslen.
+    rewrite HnUntil.
+    rewrite (map_ext_curried_Forall2 neighbors neighbor_invariants _ _ t Hnbrlen HnbrUntil).
+    apply Hstateslen.
   Qed.
 
 End UntilNet.
