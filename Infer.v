@@ -281,27 +281,6 @@ Section UntilNet.
       assumption.
     Qed.
 
-  Lemma boolean_ind_vc_until_implies_ind_vc_stuck :
-    forall n b tau' before' after' neighbors neighbor_invariants B t,
-      length B = length neighbor_invariants ->
-      boolean_inductive_condition_premises n b (mkUntil tau' before' after') neighbors neighbor_invariants B t
-      (boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
-       inductive_condition n neighbors).
-  Proof.
-    intros n b tau' before' after' neighbors neighbor_invariants B t.
-    unfold boolean_inductive_condition_premises.
-    intros HBlen HnUntil HneighborsUntil Hnbr_bounds Hn_bound Hbindvc t' states Hstateslen.
-    unfold inductive_condition.
-    apply (Hbindvc t HnUntil HneighborsUntil Hnbr_bounds Hn_bound states) in Hstateslen.
-    rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t) in Hstateslen; try congruence.
-    rewrite <- (until_has_equivalent_buntil b (1 + t) tau') in Hstateslen; try apply Hn_bound.
-    simpl in Hstateslen.
-    (* We are now stuck. The hypotheses talk about a time [t], but the goal talks about a time [t'].
-       We should instead have premises that can be instantiated for all times, so that we can specialize
-       them to [t'] and then use them to prove the goal.
-     *)
-  Abort.
-
   Lemma boolean_ind_vc_until_implies_ind_vc :
     forall n b tau' before' after' neighbors neighbor_invariants B,
       length neighbors = length neighbor_invariants ->
