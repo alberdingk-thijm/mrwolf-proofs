@@ -31,6 +31,27 @@ Proof.
     auto.
 Qed.
 
+Section NetRec.
+  Let φ (S : Type) := S -> Prop.
+  Let Q (S : Type) := nat -> (φ S).
+
+  Record Net (VType : Type) (SType : Type) := mkNet {
+      V : VType
+    ; S : SType
+    ; Merge : SType -> SType -> SType
+    ; F : VType * VType -> SType -> SType
+    ; I : VType -> SType
+    ; merge_associates : forall s1 s2 s3, Merge (Merge s1 s2) s3 = Merge s1 (Merge s2 s3)
+    ; merge_commutes : forall s1 s2, Merge s1 s2 = Merge s2 s1
+    ; A : VType -> Q SType
+    ; (* Computing a new route at a node given routes of its neighbors. *)
+      update_state (node : VType) (neighbors : list (VType * SType)) : SType :=
+      fold_right (fun (neighbor : (VType * SType)) (st : SType) =>
+                    let (m, ms) := neighbor in
+                    Merge st (F (m, node) ms)) (I node) neighbors
+  }.
+End NetRec.
+
 Section timepiece.
   Variable S : Type.
   Definition Node := nat.
@@ -92,18 +113,17 @@ Section timepiece.
     (neighbors : list (Node * S)) (neighbor_invariants : list φ) :=
     length neighbors = length neighbor_invariants ->
     (* if every neighbor's route satisfies the invariant φ *)
-    (Forall (fun (c : Node * S * φ) => ((snd c) (snd (fst c)))) (combine neighbors neighbor_invariants)) ->
+    (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
     (* then the node's invariant holds on the updated state *)
     (node_invariant (updated_state node neighbors)).
 
   (* The original inductive condition for a node [n]. *)
-  Definition inductive_condition
-    (n : Node) (g : Graph) :=
+  Definition inductive_condition (n : Node) (g : Graph) :=
     forall (t : nat) (states : list S),
       length states = length (predecessors g n) ->
       inductive_condition_untimed
         n (A n (1 + t))
-        (combine (predecessors g n) states) (map (fun m => (A m t)) (predecessors g n)).
+        (combine (predecessors g n) states) (map (fun m => A m t) (predecessors g n)).
 
   Definition inductive_invariant
     (n : Node) (g : Graph) :=
@@ -122,11 +142,13 @@ Section timepiece.
     - assumption. (* by Hinitial *)
     - simpl in *.
       unfold inductive_condition, inductive_condition_untimed in Hinductive.
+      assert (H: length (predecessors g v) = length (predecessors g v)) by reflexivity.
       specialize (Hinductive t (map (fun m => σ g m t) (predecessors g v))).
       rewrite combine_length in Hinductive.
       rewrite map_length in Hinductive.
       rewrite map_length in Hinductive.
       rewrite PeanoNat.Nat.min_id in Hinductive.
+      specialize (Hinductive H H).
       replace (combine (predecessors g v)
                        (map (fun m : Node => σ g m t) (predecessors g v)))
                 with (map (fun m : Node => (id m, σ g m t)) (predecessors g v)) in Hinductive.
@@ -139,31 +161,5 @@ Section timepiece.
         rewrite <- self_combine.
         reflexivity.
       }
-      rewrite <- map_combine.
-      replace (map (fun p : Node * Node => (id (fst p), σ g (fst p) t, A (snd p) t))
-       (combine (predecessors g v) (predecessors g v))) with
-        (map (fun u : Node => (u, σ g u t, A u t)) (predecessors g v)).
-      2: {
-        induction (predecessors g v).
-        - auto.
-        - simpl.
-      }
-      eapply Forall_impl.
-      rewrite Forall_map.
-      apply Forall_forall.
-      intros x Hxin.
-      apply in_combine_l in Hxin.
-      simpl in Hinductive.
-      induction (nth v g nil).
-      + simpl. unfold inductive_condition in Hinductive.
-        simpl in Hinductive. unfold inductive_condition_untimed in Hinductive.
-        apply (Hinductive t nil); auto.
-        apply Forall_nil.
-      + simpl in *. unfold inductive_condition in Hinductive.
-        unfold inductive_condition_untimed in Hinductive.
-        simpl in Hinductive.
-        admit.
-      (* now need to connect the state with the invariant *)
-  Admitted.
-
+      Abort.
 End timepiece.

@@ -204,30 +204,6 @@ Section UntilNet.
       apply IHneighbor_invariants; assumption.
   Qed.
 
-  Definition boolean_inductive_condition_premises
-    (n : V) (b : bool) (u : Until)
-    (neighbors : list V) (neighbor_invariants : list Until) (B : list bool) (t : nat) (P : Prop) :=
-      (* enforce that all invariants are Untils *)
-      A_is_until n u ->
-      Forall2 A_is_until neighbors neighbor_invariants ->
-      (* associate the booleans with the neighbor witness times *)
-      booleans_are_time_bounds B (map tau neighbor_invariants) t ->
-      boolean_equals_time_bound b (1 + t) (tau u) ->
-      P.
-
-  Definition boolean_inductive_condition_old
-    (n : V) (b : bool) (u : Until)
-    (neighbors : list V) (neighbor_invariants : list Until) (B : list bool) :=
-      forall (t : nat), boolean_inductive_condition_premises n b u neighbors neighbor_invariants B t
-      (* define the inductive condition check again, but now using booleans *)
-      (forall (states : list S),
-          length states = length neighbors ->
-          inductive_condition_untimed
-            n (buntil b (before u) (after u))
-            (combine neighbors states)
-            (* construct the neighbor invariants with booleans *)
-            (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))).
-
   Definition boolean_inductive_condition
     (n : V) (u : Until) (neighbors : list V) (neighbor_invariants : list Until) :=
       forall (b : bool) (B : list bool) (t : nat),
