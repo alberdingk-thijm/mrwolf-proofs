@@ -215,7 +215,7 @@ Section UntilNet.
       boolean_equals_time_bound b (1 + t) (tau u) ->
       P.
 
-  Definition boolean_inductive_condition
+  Definition boolean_inductive_condition_old
     (n : V) (b : bool) (u : Until)
     (neighbors : list V) (neighbor_invariants : list Until) (B : list bool) :=
       forall (t : nat), boolean_inductive_condition_premises n b u neighbors neighbor_invariants B t
@@ -228,25 +228,36 @@ Section UntilNet.
             (* construct the neighbor invariants with booleans *)
             (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))).
 
+  Definition boolean_inductive_condition
+    (n : V) (u : Until) (neighbors : list V) (neighbor_invariants : list Until) :=
+      forall (b : bool) (B : list bool) (t : nat),
+        length B = length neighbor_invariants ->
+        A_is_until n u ->
+        Forall2 A_is_until neighbors neighbor_invariants ->
+        booleans_are_time_bounds B (map tau neighbor_invariants) t ->
+        boolean_equals_time_bound b (1 + t) (tau u) ->
+        (* define the inductive condition check again, but now using booleans *)
+        (forall (states : list S),
+            length states = length neighbors ->
+            inductive_condition_untimed
+              n (buntil b (before u) (after u))
+              (combine neighbors states)
+              (* construct the neighbor invariants with booleans *)
+              (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))).
+
   (** Proof that the inductive condition implies the boolean inductive condition. *)
   Lemma ind_vc_until_implies_boolean_ind_vc :
-    forall (n : V) (b : bool) (tau : nat) (node_before node_after : φ)
-      (neighbors : list V) (neighbor_invariants : list Until) (B : list bool),
+    forall (n : V) (u : Until) (neighbors : list V) (neighbor_invariants : list Until),
       length neighbors = length neighbor_invariants ->
-      length B = length neighbor_invariants ->
       inductive_condition n neighbors ->
-      boolean_inductive_condition n b (mkUntil tau node_before node_after)
-        neighbors neighbor_invariants B.
+      boolean_inductive_condition n u neighbors neighbor_invariants.
   Proof using Type.
-    unfold
-      inductive_condition,
-      boolean_inductive_condition,
-      booleans_are_time_bounds.
+    unfold inductive_condition, boolean_inductive_condition, booleans_are_time_bounds.
     simpl.
-    intros n b tau' node_before node_after neighbors neighbor_invariants B Hnbrlen Hblen Hindvc
-      t HnUntil HneighborsUntil Hnbr_bounds Hn_bound states Hstateslen.
+    intros n u neighbors neighbor_invariants Hnbrlen Hindvc
+      b B t Hblen HnUntil HneighborsUntil Hnbr_bounds Hn_bound states Hstateslen.
     (* match up the until and buntil *)
-    apply (until_has_equivalent_buntil _ _ _ node_before node_after) in Hn_bound.
+    apply (until_has_equivalent_buntil _ _ _ (before u) (after u)) in Hn_bound.
     rewrite <- Hn_bound.
     apply (untils_have_equivalent_buntils neighbor_invariants B t Hblen) in Hnbr_bounds.
     rewrite <- Hnbr_bounds.
@@ -257,50 +268,49 @@ Section UntilNet.
     apply Hstateslen.
   Qed.
 
-  (** Proof that the boolean inductive condition implies the inductive condition
-      when the premises of the boolean inductive condition are met.
-   *)
-  Lemma boolean_ind_vc_until_implies_ind_vc_aux :
-    forall n b tau' before' after' neighbors neighbor_invariants B t,
-      length B = length neighbor_invariants ->
-      boolean_inductive_condition_premises n b (mkUntil tau' before' after') neighbors neighbor_invariants B t
-      (boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
-      (* inductive condition for the same time [t] as above *)
-      forall states : list S,
-        length states = length neighbors ->
-        inductive_condition_untimed n (until tau' before' after' (1 + t)) (combine neighbors states)
-          (map (fun x : Until => construct_until x t) neighbor_invariants)).
-    Proof using Type.
-      intros n b tau' before' after' neighbors neighbor_invariants B t
-        HBlen HnUntil HneighborsUntil Hnbr_bounds Hn_bound Hbindvc states Hstateslen.
-      unfold boolean_inductive_condition in Hbindvc.
-      apply (Hbindvc t HnUntil HneighborsUntil Hnbr_bounds Hn_bound states) in Hstateslen.
-      rewrite (untils_have_equivalent_buntils neighbor_invariants B t); try congruence.
-      rewrite (until_has_equivalent_buntil b).
-      2: { simpl. assumption. }
-      assumption.
-    Qed.
-
+  (** Proof that the boolean inductive condition implies the inductive condition. *)
   Lemma boolean_ind_vc_until_implies_ind_vc :
-    forall n b tau' before' after' neighbors neighbor_invariants B,
-      length neighbors = length neighbor_invariants ->
+    forall n u neighbors neighbor_invariants (b : bool) (B : list bool),
       length B = length neighbor_invariants ->
-      A_is_until n (mkUntil tau' before' after') ->
+      length neighbors = length neighbor_invariants ->
+      A_is_until n u ->
       Forall2 A_is_until neighbors neighbor_invariants ->
-      (forall t, booleans_are_time_bounds B (map tau neighbor_invariants) t) ->
-      (forall t, boolean_equals_time_bound b (1 + t) tau') ->
-      boolean_inductive_condition n b (mkUntil tau' before' after') neighbors neighbor_invariants B ->
+      (forall t,
+          booleans_are_time_bounds B (map tau neighbor_invariants) t /\
+          boolean_equals_time_bound b (1 + t) (tau u)) ->
+      boolean_inductive_condition n u neighbors neighbor_invariants ->
        inductive_condition n neighbors.
   Proof.
-    unfold inductive_condition.
-    intros n b tau' before' after' neighbors neighbor_invariants B Hnbrlen Hblen HnUntil HnbrUntil HnbrBounds HnBound Hbindvc
-         t states Hstateslen.
-    apply (Hbindvc _ HnUntil HnbrUntil (HnbrBounds t) (HnBound t) states) in Hstateslen.
-    rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t Hblen (HnbrBounds t)) in Hstateslen.
-    rewrite <- (until_has_equivalent_buntil b (1 + t) tau' _ _ (HnBound t)) in Hstateslen.
+    unfold inductive_condition, boolean_inductive_condition.
+    intros n u neighbors neighbor_invariants b B HBlen Hnbrlen HnUntil HnbrUntil
+      HB Hbindvc t states Hstateslen.
+    specialize (HB t).
+    destruct HB as [HnbrBounds HnBound].
+    apply (Hbindvc b B t HBlen HnUntil HnbrUntil HnbrBounds HnBound states) in Hstateslen.
+    rewrite <- (untils_have_equivalent_buntils neighbor_invariants B t HBlen HnbrBounds) in Hstateslen.
+    rewrite <- (until_has_equivalent_buntil b (1 + t) (tau u) _ _ HnBound) in Hstateslen.
     rewrite HnUntil.
     rewrite (map_ext_curried_Forall2 neighbors neighbor_invariants _ _ t Hnbrlen HnbrUntil).
     apply Hstateslen.
+  Qed.
+
+  (** Proof that the inductive condition is equivalent to a boolean inductive condition
+      when the booleans represent the time bounds of untils. *)
+  Theorem ind_vc_until_boolean_equivalent :
+    forall n u neighbors neighbor_invariants (b : bool) (B : list bool),
+      length B = length neighbor_invariants ->
+      length neighbors = length neighbor_invariants ->
+      A_is_until n u ->
+      Forall2 A_is_until neighbors neighbor_invariants ->
+      (forall t,
+          booleans_are_time_bounds B (map tau neighbor_invariants) t /\
+          boolean_equals_time_bound b (1 + t) (tau u)) ->
+      boolean_inductive_condition n u neighbors neighbor_invariants <->
+       inductive_condition n neighbors.
+  Proof.
+    split.
+    apply (boolean_ind_vc_until_implies_ind_vc _ _ _ _ b B H H0 H1 H2 H3).
+    apply (ind_vc_until_implies_boolean_ind_vc _ _ _ _ H0).
   Qed.
 
 End UntilNet.
