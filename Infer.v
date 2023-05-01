@@ -294,6 +294,14 @@ End UntilNet.
 Section SelectiveNet.
   Axiom merge_selectivity : forall s1 s2, Merge s1 s2 = s1 \/ Merge s1 s2 = s2.
 
+  Lemma merge_idempotent :
+    forall s, Merge s s = s.
+  Proof.
+    intros.
+    remember (merge_selectivity s s) as H.
+    destruct H; auto.
+  Qed.
+
   Definition better_or_eq (s1 s2 : S) :=
     Merge s1 s2 = s1.
 
@@ -313,5 +321,16 @@ Section SelectiveNet.
     unfold better_inv.
     intros s0 s3 Hle1 Hle2.
     congruence.
+  Qed.
+
+  Lemma better_or_eq_transitive :
+    forall s1 s2 s3 : S, s1 ⪯ s2 -> s2 ⪯ s3 -> s1 ⪯ s3.
+  Proof.
+    intros.
+    rewrite <- H.
+    unfold better_or_eq.
+    rewrite merge_associativity.
+    rewrite H0.
+    reflexivity.
   Qed.
 End SelectiveNet.
