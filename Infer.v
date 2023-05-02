@@ -333,4 +333,19 @@ Section SelectiveNet.
     rewrite H0.
     reflexivity.
   Qed.
+
+  Lemma selective_neighbor_pairs_cover_selective_neighbors :
+    forall v u1 u2 u3,
+      (inductive_condition v (u1 :: u2 :: nil)) ->
+      (inductive_condition v (u2 :: u3 :: nil)) ->
+      (inductive_condition v (u1 :: u3 :: nil)) ->
+      (inductive_condition v (u1 :: u2 :: u3 :: nil)).
+  Proof.
+    intros v u1 u2 u3 H12 H23 H13.
+    unfold inductive_condition.
+    intros t states Hstateslen.
+    specialize (H12 t).
+    specialize (H23 t).
+    specialize (H13 t).
+    Abort.
 End SelectiveNet.
