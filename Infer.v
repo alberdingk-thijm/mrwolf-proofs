@@ -63,9 +63,7 @@ Lemma map_ext_curried_Forall2 :
     (l1 : list T1) (l2 : list T2)
     (f1 : T1 -> T3 -> T4) (f2 : T2 -> T3 -> T4) (w : T3),
     length l1 = length l2 ->
-    (* if all invariants are Untils *)
     Forall2 (fun x y => forall z, f1 x z = f2 y z) l1 l2 ->
-    (* then mapping the *)
     map (fun x => f1 x w) l1 = map (fun y => f2 y w) l2.
 Proof.
   intros.
@@ -80,6 +78,18 @@ Proof.
   2: apply H0.
   simpl in H1.
   apply H1.
+Qed.
+
+Lemma fold_right_map :
+  forall { T1 T2 : Type }
+    (l : list T1) (f : T2 -> T2 -> T2) (g : T1 -> T2) (z : T2),
+    fold_right (fun x y => f (g x) y) z l =
+      fold_right f z (map g l).
+Proof.
+  intros.
+  induction l.
+  - simpl. reflexivity.
+  - simpl. rewrite IHl. reflexivity.
 Qed.
 
 Section Net.
@@ -99,11 +109,13 @@ Section Net.
   Definition Q := nat -> φ.
   Parameter A : V -> Q.
 
+  (* Applying the transfer function to each neighbor's route. *)
+  Definition transfer_routes (node : V) (neighbors : list (V * S)) : list S :=
+    (map (fun (neighbor : (V * S)) => F (fst neighbor, node) (snd neighbor)) neighbors).
+
   (* Computing a new route at a node given routes of its neighbors. *)
   Definition updated_state (node : V) (neighbors : list (V * S)) : S :=
-    fold_right (fun (neighbor : (V * S)) (st : S) =>
-                  let (m, ms) := neighbor in
-                  Merge st (F (m, node) ms)) (I node) neighbors.
+    fold_right Merge (I node) (transfer_routes node neighbors).
 
   (* A helper definition for writing out the inductive condition with times
      erased: all invariants are specified as [S -> Prop] functions. *)
@@ -292,10 +304,10 @@ Section UntilNet.
 End UntilNet.
 
 Section SelectiveNet.
-  Axiom merge_selectivity : forall s1 s2, Merge s1 s2 = s1 \/ Merge s1 s2 = s2.
+  Axiom merge_selectivity : forall s1 s2, s1 = Merge s1 s2 \/ s2 = Merge s1 s2.
 
   Lemma merge_idempotent :
-    forall s, Merge s s = s.
+    forall s, s = Merge s s.
   Proof.
     intros.
     remember (merge_selectivity s s) as H.
@@ -303,7 +315,7 @@ Section SelectiveNet.
   Qed.
 
   Definition better_or_eq (s1 s2 : S) :=
-    Merge s1 s2 = s1.
+    s1 = Merge s1 s2.
 
   Definition better (s1 s2 : S) :=
     better_or_eq s1 s2 /\ s1 <> s2.
@@ -327,12 +339,76 @@ Section SelectiveNet.
     forall s1 s2 s3 : S, s1 ⪯ s2 -> s2 ⪯ s3 -> s1 ⪯ s3.
   Proof.
     intros.
-    rewrite <- H.
+    rewrite H.
     unfold better_or_eq.
     rewrite merge_associativity.
-    rewrite H0.
+    rewrite <- H0.
     reflexivity.
   Qed.
+
+  Lemma selective_merge_fold :
+    forall s states, In (fold_right Merge s states) (s :: states).
+  Proof.
+    intros s states.
+    induction states.
+    - simpl. left. reflexivity.
+    - simpl in *. destruct IHstates as [IHs | IHstates].
+      + rewrite <- IHs.
+        rewrite <- or_assoc.
+        left.
+        rewrite or_comm.
+        apply (merge_selectivity a s).
+      + right.
+        remember (merge_selectivity a (fold_right Merge s states)) as H.
+        destruct H as [Habetter | Hstatesbetter].
+        * left. assumption.
+        * rewrite <- Hstatesbetter.
+          right. assumption.
+  Qed.
+
+  Lemma selective_updated_state :
+    forall v neighbors states,
+      length neighbors = length states ->
+      In (updated_state v (combine neighbors states))
+        ((I v) :: transfer_routes v (combine neighbors states)).
+  Proof.
+    intros v neighbors states Hstateslen.
+    unfold updated_state.
+    (* rewrite fold_right_map. *)
+    apply (selective_merge_fold (I v) (transfer_routes v (combine neighbors states))).
+  Qed.
+
+  Lemma selective_inductive_condition_selects :
+    forall (v : V) (node_invariant : φ) (neighbors : list V) (states : list S) (invariants : list φ),
+      length neighbors = length states ->
+      length neighbors = length invariants ->
+      (* if the inductive condition holds for the given set of invariants... *)
+      inductive_condition_untimed v node_invariant (combine neighbors states)
+        invariants ->
+      (* then there exists a state from a particular node that satisfies the invariant and is selected *)
+      (* Exists (fun p => (fst p) (snd p)) ((node_invariant, I v) :: (combine invariants states)). *)
+      Forall2 (fun s p => p s) states invariants  ->
+      Exists node_invariant
+        ((I v) :: transfer_routes v (combine neighbors states)).
+  Proof.
+    intros.
+    apply Exists_exists.
+    exists (updated_state v (combine neighbors states)).
+    split.
+    apply (selective_updated_state _ _ _ H).
+    unfold inductive_condition_untimed in H1.
+    rewrite combine_length in H1.
+    rewrite <- H in H1.
+    rewrite PeanoNat.Nat.min_id in H1.
+    apply H1 in H0.
+    assumption.
+    apply Forall_forall2 in H2.
+    2: { rewrite <- H. apply H0. }
+    apply Forall_forall2.
+    { rewrite combine_length. rewrite <- H. rewrite PeanoNat.Nat.min_id. apply H0. }
+    (* TODO: project out the unneeded neighbors part in the goal *)
+    eapply Forall_impl.
+    Abort.
 
   Lemma selective_neighbor_pairs_cover_selective_neighbors :
     forall v u1 u2 u3,
@@ -342,8 +418,15 @@ Section SelectiveNet.
       (inductive_condition v (u1 :: u2 :: u3 :: nil)).
   Proof.
     intros v u1 u2 u3 H12 H23 H13.
-    unfold inductive_condition.
+    unfold inductive_condition in *.
     intros t states Hstateslen.
+    unfold inductive_condition_untimed.
+    simpl in Hstateslen.
+    rewrite combine_length.
+    rewrite map_length.
+    rewrite Hstateslen.
+    rewrite PeanoNat.Nat.min_id.
+    intros.
     specialize (H12 t).
     specialize (H23 t).
     specialize (H13 t).
