@@ -39,6 +39,31 @@ Lemma map_project_combine2 :
       simpl. reflexivity.
 Qed.
 
+Lemma map_combine :
+  forall {T1 T2 T3 T4 : Type} (l1 : list T1) (l2 : list T2) (f1 : T1 -> T3) (f2 : T2 -> T4),
+    map (fun p => (f1 (fst p), f2 (snd p))) (combine l1 l2) =
+      combine (map f1 l1) (map f2 l2).
+  Proof.
+    intros; generalize dependent l2.
+    induction l1; auto.
+    intros l2.
+    rewrite map_cons.
+    induction l2; auto.
+    simpl.
+    rewrite IHl1. reflexivity.
+Qed.
+
+Lemma map_combine_map :
+  forall {T1 T2 T3 T4 T5 : Type} (l1 : list T1) (l2 : list T2) (f1 : T1 -> T3) (f2 : T2 -> T4) (g : (T3 * T4) -> T5),
+    map (fun p => g (f1 (fst p), f2 (snd p))) (combine l1 l2) =
+      map g (combine (map f1 l1) (map f2 l2)).
+Proof.
+  intros.
+  rewrite <- map_combine.
+  rewrite map_map.
+  reflexivity.
+Qed.
+
 Lemma Forall_forall2 :
   forall { T1 T2 : Type } (R : T1 -> T2 -> Prop) (l1 : list T1) (l2 : list T2),
     length l1 = length l2 ->
@@ -385,9 +410,8 @@ Section SelectiveNet.
       (* if the inductive condition holds for the given set of invariants... *)
       inductive_condition_untimed v node_invariant (combine neighbors states)
         invariants ->
+      Forall2 (fun s p => p (snd s)) (combine neighbors states) invariants  ->
       (* then there exists a state from a particular node that satisfies the invariant and is selected *)
-      (* Exists (fun p => (fst p) (snd p)) ((node_invariant, I v) :: (combine invariants states)). *)
-      Forall2 (fun s p => p s) states invariants  ->
       Exists node_invariant
         ((I v) :: transfer_routes v (combine neighbors states)).
   Proof.
@@ -403,12 +427,11 @@ Section SelectiveNet.
     apply H1 in H0.
     assumption.
     apply Forall_forall2 in H2.
-    2: { rewrite <- H. apply H0. }
+    2: { rewrite combine_length. rewrite <- H. rewrite PeanoNat.Nat.min_id. apply H0. }
     apply Forall_forall2.
     { rewrite combine_length. rewrite <- H. rewrite PeanoNat.Nat.min_id. apply H0. }
-    (* TODO: project out the unneeded neighbors part in the goal *)
-    eapply Forall_impl.
-    Abort.
+    apply H2.
+  Qed.
 
   Lemma selective_neighbor_pairs_cover_selective_neighbors :
     forall v u1 u2 u3,
@@ -427,8 +450,5 @@ Section SelectiveNet.
     rewrite Hstateslen.
     rewrite PeanoNat.Nat.min_id.
     intros.
-    specialize (H12 t).
-    specialize (H23 t).
-    specialize (H13 t).
     Abort.
 End SelectiveNet.
