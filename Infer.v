@@ -4,9 +4,7 @@ Require Import Coq.Lists.List.
 Require Import Coq.Program.Basics.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
-Require Import Coq.Structures.Orders.
-Require Import Coq.Structures.OrdersLists.
-Require Import Coq.Structures.GenericMinMax.
+Require Import Coq.Classes.RelationClasses.
 
 Lemma map_project_combine1 :
   forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
@@ -130,45 +128,91 @@ Section Net.
   Axiom merge_commutativity : forall s1 s2, Merge s1 s2 = Merge s2 s1.
 
   (* interface and predicate definitions *)
-  Definition φ := S -> Prop.
-  Definition Q := nat -> φ.
-  Parameter A : V -> Q.
+  Definition φ (S : Type) := S -> Prop.
+  Definition Q (S : Type) := nat -> φ S.
+  Parameter A : V -> Q S.
 
-  (* Applying the transfer function to each neighbor's route. *)
-  Definition transfer_routes (node : V) (neighbors : list (V * S)) : list S :=
-    (map (fun (neighbor : (V * S)) => F (fst neighbor, node) (snd neighbor)) neighbors).
+  Class Net Vx S : Type :=
+    {
+      Merges : S -> S -> S;
+      Fs : Vx -> Vx -> S -> S;
+      Is : Vx -> S;
+      merge_assoc : forall s1 s2 s3, Merges s1 (Merges s2 s3) = Merges (Merges s1 s2) s3;
+      merge_comm : forall s1 s2, Merges s1 s2 = Merges s2 s1;
+      An : Vx -> nat -> S -> Prop
+    }.
 
-  (* Computing a new route at a node given routes of its neighbors. *)
-  Definition updated_state (node : V) (neighbors : list (V * S)) : S :=
-    fold_right Merge (I node) (transfer_routes node neighbors).
+
+  Definition transfer_routes_net `{H: Net V S} (node : V) (neighbors : list (V * S)) :=
+    (map (fun (neighbor : (V * S)) => Fs (fst neighbor) node (snd neighbor)) neighbors).
+
+  Definition updated_state_net `{H: Net V S} (node : V) (neighbors : list (V * S)) : S :=
+    fold_right Merges (Is node) (transfer_routes_net node neighbors).
 
   (* A helper definition for writing out the inductive condition with times
      erased: all invariants are specified as [S -> Prop] functions. *)
-  Definition inductive_condition_untimed
-    (node : V) (node_invariant : φ)
-    (neighbors : list (V * S)) (neighbor_invariants : list φ) :=
+  Definition inductive_condition_untimed_net `{H: Net V S}
+    (node : V) (node_invariant : φ S)
+    (neighbors : list (V * S)) (neighbor_invariants : list (φ S)) :=
     length neighbors = length neighbor_invariants ->
     (* if every neighbor's route satisfies the invariant φ *)
     (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) ->
     (* then the node's invariant holds on the updated state *)
-    (node_invariant (updated_state node neighbors)).
+    (node_invariant (updated_state_net node neighbors)).
 
   (* The original inductive condition for a node [n]. *)
-  Definition inductive_condition (n : V) (neighbors : list V) :=
+  Definition inductive_condition_net `{H: Net V S} (n : V) (neighbors : list V) :=
     forall (t : nat) (states : list S),
       length states = length neighbors ->
-      inductive_condition_untimed
-        n (A n (1 + t))
-        (combine neighbors states) (map (fun m => A m t) neighbors).
+      inductive_condition_untimed_net
+        n (An n (1 + t))
+        (combine neighbors states) (map (fun m => An m t) neighbors).
+
+  Instance boolNet : Net nat bool :=
+    {
+      Merges := orb;
+      Fs := fun u v s => s;
+      Is := fun v => if (v =? 0) then true else false;
+      merge_assoc := Bool.orb_assoc;
+      merge_comm := Bool.orb_comm;
+      An := fun v => if (v =? 0) then (fun t s => True) else (fun t s => s = (t <? 1))
+    }.
+
+  (* Applying the transfer function to each neighbor's route. *)
+  (* Definition transfer_routes (node : V) (neighbors : list (V * S)) : list S := *)
+  (*   (map (fun (neighbor : (V * S)) => F (fst neighbor, node) (snd neighbor)) neighbors). *)
+
+  (* Computing a new route at a node given routes of its neighbors. *)
+  (* Definition updated_state (node : V) (neighbors : list (V * S)) : S := *)
+  (*   fold_right Merge (I node) (transfer_routes node neighbors). *)
+
+  (* A helper definition for writing out the inductive condition with times
+     erased: all invariants are specified as [S -> Prop] functions. *)
+  (* Definition inductive_condition_untimed *)
+  (*   (node : V) (node_invariant : φ S) *)
+  (*   (neighbors : list (V * S)) (neighbor_invariants : list (φ S)) := *)
+  (*   length neighbors = length neighbor_invariants -> *)
+  (*   (* if every neighbor's route satisfies the invariant φ *) *)
+  (*   (Forall2 (fun m p => p (snd m)) neighbors neighbor_invariants) -> *)
+  (*   (* then the node's invariant holds on the updated state *) *)
+  (*   (node_invariant (updated_state node neighbors)). *)
+
+  (* The original inductive condition for a node [n]. *)
+(*   Definition inductive_condition (n : V) (neighbors : list V) := *)
+(*     forall (t : nat) (states : list S), *)
+(*       length states = length neighbors -> *)
+(*       inductive_condition_untimed *)
+(*         n (A n (1 + t)) *)
+(*         (combine neighbors states) (map (fun m => A m t) neighbors). *)
 End Net.
 
 Section UntilNet.
   (* The until temporal operator. *)
-  Definition until (tau : nat) (before after : φ) : Q :=
+  Definition until (tau : nat) (before after : φ S) : Q S :=
     fun t s => if t <? tau then before s else after s.
 
   (* The until operator, with a boolean instead of a time bound. *)
-  Definition buntil (b : bool) (before after : φ) : φ :=
+  Definition buntil (b : bool) (before after : φ S) : φ S :=
     fun s => if b then before s else after s.
 
   Example until_example1 :
@@ -183,22 +227,22 @@ Section UntilNet.
   Record Until := mkUntil
     {
       tau : nat
-    ; before : φ
-    ; after : φ
+    ; before : φ S
+    ; after : φ S
     }.
 
-  Definition construct_until (u : Until) : Q :=
+  Definition construct_until (u : Until) : Q S :=
     until (tau u) (before u) (after u).
 
-  Definition A_is_until (n : V) (u : Until) :=
-    forall t, A n t = construct_until u t.
+  Definition A_is_until `{H : Net V S} (n : V) (u : Until) :=
+    forall t, An n t = construct_until u t.
 
   Definition boolean_equals_time_bound (b : bool) (t tau : nat) :=
     b = (t <? tau).
 
   (* Lemma relating until and buntil. *)
   Lemma until_has_equivalent_buntil :
-    forall (b : bool) (t tau : nat) (φ1 φ2 : φ),
+    forall (b : bool) (t tau : nat) (φ1 φ2 : φ S),
       boolean_equals_time_bound b t tau ->
       (until tau φ1 φ2) t = (buntil b φ1 φ2).
   Proof using Type.
@@ -241,7 +285,7 @@ Section UntilNet.
       apply IHneighbor_invariants; assumption.
   Qed.
 
-  Definition boolean_inductive_condition
+  Definition boolean_inductive_condition `{H : Net V S}
     (n : V) (u : Until) (neighbors : list V) (neighbor_invariants : list Until) :=
       forall (b : bool) (B : list bool) (t : nat),
         length B = length neighbor_invariants ->
@@ -252,20 +296,20 @@ Section UntilNet.
         (* define the inductive condition check again, but now using booleans *)
         (forall (states : list S),
             length states = length neighbors ->
-            inductive_condition_untimed
+            inductive_condition_untimed_net
               n (buntil b (before u) (after u))
               (combine neighbors states)
               (* construct the neighbor invariants with booleans *)
               (map (fun p => buntil (fst p) (before (snd p)) (after (snd p))) (combine B neighbor_invariants))).
 
   (** Proof that the inductive condition implies the boolean inductive condition. *)
-  Lemma ind_vc_until_implies_boolean_ind_vc :
+  Lemma ind_vc_until_implies_boolean_ind_vc `{H : Net V S}:
     forall (n : V) (u : Until) (neighbors : list V) (neighbor_invariants : list Until),
       length neighbors = length neighbor_invariants ->
-      inductive_condition n neighbors ->
+      inductive_condition_net n neighbors ->
       boolean_inductive_condition n u neighbors neighbor_invariants.
   Proof using Type.
-    unfold inductive_condition, boolean_inductive_condition, booleans_are_time_bounds.
+    unfold inductive_condition_net, boolean_inductive_condition, booleans_are_time_bounds.
     simpl.
     intros n u neighbors neighbor_invariants Hnbrlen Hindvc
       b B t Hblen HnUntil HneighborsUntil Hnbr_bounds Hn_bound states Hstateslen.
@@ -282,7 +326,7 @@ Section UntilNet.
   Qed.
 
   (** Proof that the boolean inductive condition implies the inductive condition. *)
-  Lemma boolean_ind_vc_until_implies_ind_vc :
+  Lemma boolean_ind_vc_until_implies_ind_vc `{H : Net V S}:
     forall n u neighbors neighbor_invariants (b : bool) (B : list bool),
       length B = length neighbor_invariants ->
       length neighbors = length neighbor_invariants ->
@@ -292,9 +336,9 @@ Section UntilNet.
           booleans_are_time_bounds B (map tau neighbor_invariants) t /\
           boolean_equals_time_bound b (1 + t) (tau u)) ->
       boolean_inductive_condition n u neighbors neighbor_invariants ->
-       inductive_condition n neighbors.
+       inductive_condition_net n neighbors.
   Proof.
-    unfold inductive_condition, boolean_inductive_condition.
+    unfold inductive_condition_net, boolean_inductive_condition.
     intros n u neighbors neighbor_invariants b B HBlen Hnbrlen HnUntil HnbrUntil
       HB Hbindvc t states Hstateslen.
     specialize (HB t).
@@ -309,7 +353,7 @@ Section UntilNet.
 
   (** Proof that the inductive condition is equivalent to a boolean inductive condition
       when the booleans represent the time bounds of untils. *)
-  Theorem ind_vc_until_boolean_equivalent :
+  Theorem ind_vc_until_boolean_equivalent `{H : Net V S}:
     forall n u neighbors neighbor_invariants (b : bool) (B : list bool),
       length B = length neighbor_invariants ->
       length neighbors = length neighbor_invariants ->
@@ -319,39 +363,44 @@ Section UntilNet.
           booleans_are_time_bounds B (map tau neighbor_invariants) t /\
           boolean_equals_time_bound b (1 + t) (tau u)) ->
       boolean_inductive_condition n u neighbors neighbor_invariants <->
-       inductive_condition n neighbors.
+       inductive_condition_net n neighbors.
   Proof.
     split.
-    apply (boolean_ind_vc_until_implies_ind_vc _ _ _ _ b B H H0 H1 H2 H3).
-    apply (ind_vc_until_implies_boolean_ind_vc _ _ _ _ H0).
+    apply (boolean_ind_vc_until_implies_ind_vc _ _ _ _ b B H0 H1 H2 H3 H4).
+    apply (ind_vc_until_implies_boolean_ind_vc _ _ _ _ H1).
   Qed.
 
 End UntilNet.
 
 Section SelectiveNet.
+  Class SelectiveNet V S `{Net V S} : Type :=
+    {
+      merge_select : forall s1 s2, s1 = Merges s1 s2 \/ s2 = Merges s1 s2
+    }.
+
   Axiom merge_selectivity : forall s1 s2, s1 = Merge s1 s2 \/ s2 = Merge s1 s2.
 
-  Lemma merge_idempotent :
-    forall s, s = Merge s s.
+  Lemma merge_idempotent `{H: SelectiveNet V S} :
+    forall s, s = Merges s s.
   Proof.
     intros.
-    remember (merge_selectivity s s) as H.
-    destruct H; auto.
+    remember (merge_select s s) as H1.
+    destruct H1; auto.
   Qed.
 
-  Definition better_or_eq (s1 s2 : S) :=
-    s1 = Merge s1 s2.
+  Definition better_or_eq `{H: SelectiveNet V S} (s1 s2 : S) :=
+    s1 = Merges s1 s2.
 
-  Definition better (s1 s2 : S) :=
+  Definition better `{H: SelectiveNet V S} (s1 s2 : S) :=
     better_or_eq s1 s2 /\ s1 <> s2.
 
   Infix "⪯" := better_or_eq (at level 20).
   Infix "≺" := better (at level 20).
 
-  Definition better_inv (φ1 φ2 : φ) :=
+  Definition better_inv `{H: SelectiveNet V S} (φ1 φ2 : φ S) :=
     forall s1 s2, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
 
-  Example better_inv1 :
+  Example better_inv1 `{H: SelectiveNet V S}:
     forall s1 s2, s1 ⪯ s2 -> better_inv (fun s => s = s1) (fun s => s = s2).
   Proof.
     intros s1 s2 Hle.
@@ -360,19 +409,19 @@ Section SelectiveNet.
     congruence.
   Qed.
 
-  Lemma better_or_eq_transitive :
+  Lemma better_or_eq_transitive `{H: SelectiveNet V S}:
     forall s1 s2 s3 : S, s1 ⪯ s2 -> s2 ⪯ s3 -> s1 ⪯ s3.
   Proof.
     intros.
-    rewrite H.
+    rewrite H1.
     unfold better_or_eq.
-    rewrite merge_associativity.
-    rewrite <- H0.
+    rewrite <- merge_assoc.
+    rewrite <- H2.
     reflexivity.
   Qed.
 
-  Lemma selective_merge_fold :
-    forall s states, In (fold_right Merge s states) (s :: states).
+  Lemma selective_merge_fold `{H: SelectiveNet V S}:
+    forall s states, In (fold_right Merges s states) (s :: states).
   Proof.
     intros s states.
     induction states.
@@ -382,89 +431,89 @@ Section SelectiveNet.
         rewrite <- or_assoc.
         left.
         rewrite or_comm.
-        apply (merge_selectivity a s).
+        apply (merge_select a s).
       + right.
-        remember (merge_selectivity a (fold_right Merge s states)) as H.
-        destruct H as [Habetter | Hstatesbetter].
+        remember (merge_select a (fold_right Merges s states)) as H1.
+        destruct H1 as [Habetter | Hstatesbetter].
         * left. assumption.
         * rewrite <- Hstatesbetter.
           right. assumption.
   Qed.
 
-  Lemma selective_updated_state :
+  Lemma selective_updated_state `{H: SelectiveNet V S}:
     forall v neighbors states,
       length neighbors = length states ->
-      In (updated_state v (combine neighbors states))
-        ((I v) :: transfer_routes v (combine neighbors states)).
+      In (updated_state_net v (combine neighbors states))
+        ((Is v) :: transfer_routes_net v (combine neighbors states)).
   Proof.
     intros v neighbors states Hstateslen.
-    unfold updated_state.
+    unfold updated_state_net.
     (* rewrite fold_right_map. *)
-    apply (selective_merge_fold (I v) (transfer_routes v (combine neighbors states))).
+    apply (selective_merge_fold (Is v) (transfer_routes_net v (combine neighbors states))).
   Qed.
 
-  Lemma selective_inductive_condition_selects :
-    forall (v : V) (node_invariant : φ) (neighbors : list V) (states : list S) (invariants : list φ),
+  Lemma selective_inductive_condition_selects `{H: SelectiveNet V S}:
+    forall (v : V) (node_invariant : φ S) (neighbors : list V) (states : list S) (invariants : list (φ S)),
       length neighbors = length states ->
       length neighbors = length invariants ->
       (* if the inductive condition holds for the given set of invariants... *)
-      inductive_condition_untimed v node_invariant (combine neighbors states)
+      inductive_condition_untimed_net v node_invariant (combine neighbors states)
         invariants ->
       Forall2 (fun s p => p (snd s)) (combine neighbors states) invariants  ->
       (* then there exists a state from a particular node that satisfies the invariant and is selected *)
       Exists node_invariant
-        ((I v) :: transfer_routes v (combine neighbors states)).
+        ((Is v) :: transfer_routes_net v (combine neighbors states)).
   Proof.
     intros.
     apply Exists_exists.
-    exists (updated_state v (combine neighbors states)).
+    exists (updated_state_net v (combine neighbors states)).
     split.
-    apply (selective_updated_state _ _ _ H).
-    unfold inductive_condition_untimed in H1.
-    rewrite combine_length in H1.
-    rewrite <- H in H1.
-    rewrite PeanoNat.Nat.min_id in H1.
-    apply H1 in H0.
-    assumption.
-    apply Forall_forall2 in H2.
-    2: { rewrite combine_length. rewrite <- H. rewrite PeanoNat.Nat.min_id. apply H0. }
+    apply (selective_updated_state _ _ _ H1).
+    unfold inductive_condition_untimed_net in H3.
+    rewrite combine_length in H3.
+    rewrite <- H1 in H3.
+    rewrite PeanoNat.Nat.min_id in H3.
+    specialize (H3 H2).
+    apply Forall_forall2 in H4.
+    2: { rewrite combine_length. rewrite <- H1. rewrite PeanoNat.Nat.min_id. apply H2. }
+    apply H3.
     apply Forall_forall2.
-    { rewrite combine_length. rewrite <- H. rewrite PeanoNat.Nat.min_id. apply H0. }
-    apply H2.
+    2: apply H4.
+    rewrite combine_length. rewrite <- H1. rewrite PeanoNat.Nat.min_id. apply H2.
   Qed.
 
-  Lemma selective_neighbor_pairs_cover_selective_neighbors :
+  Lemma selective_neighbor_pairs_cover_selective_neighbors `{H: SelectiveNet V S}:
     forall v u w neighbors,
-      inductive_condition v (u :: neighbors) ->
-      inductive_condition v (w :: neighbors) ->
-      inductive_condition v (u :: w :: nil)  ->
-      inductive_condition v (u :: w :: neighbors).
+      inductive_condition_net v (u :: neighbors) ->
+      inductive_condition_net v (w :: neighbors) ->
+      inductive_condition_net v (u :: w :: nil)  ->
+      inductive_condition_net v (u :: w :: neighbors).
   Proof.
     intros v u w neighbors.
     induction neighbors; intros Hu Hw Huw t states Hstateslen.
     - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
       inversion Hstateslen.
-      rewrite length_zero_iff_nil in H0.
+      rewrite length_zero_iff_nil in H2.
       subst.
       simpl.
-      unfold inductive_condition_untimed.
+      unfold inductive_condition_untimed_net.
       simpl.
       intros.
-      inversion H0.
+      inversion H2.
       subst.
-      inversion H6.
+      inversion H8.
       subst.
-      simpl in H4, H5.
-      unfold inductive_condition, inductive_condition_untimed in Hu, Hw, Huw.
+      simpl in H6, H7.
+      unfold inductive_condition_net, inductive_condition_untimed_net in Hu, Hw, Huw.
       specialize (Hu t (s :: nil) eq_refl eq_refl).
       specialize (Hw t (s0 :: nil) eq_refl eq_refl).
       specialize (Huw t (s :: s0 :: nil) eq_refl eq_refl).
       simpl in Hu, Hw, Huw.
-      apply Hw in H6.
-      clear H.
-      assert (H: Forall2 (fun m p => p (snd m)) ((u, s) :: nil) (A u t :: nil)).
+      specialize (Hw H8).
+      clear H1.
+      assert (Huh: Forall2 (fun m p => p (snd m)) ((u, s) :: nil) (An u t :: nil)).
       { apply Forall2_cons. assumption. apply Forall2_nil. }
-      apply Hu in H.
+      specialize (Hu Huh).
       apply Huw.
       apply Forall2_cons.
       assumption.
@@ -473,21 +522,20 @@ Section SelectiveNet.
       assumption.
   - do 3 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
     inversion Hstateslen.
-    unfold inductive_condition_untimed.
+    unfold inductive_condition_untimed_net.
     intros.
-    inversion H1.
-    inversion H7.
-    inversion H13.
+    inversion H3.
+    inversion H9.
+    inversion H15.
     subst.
-    simpl in H5, H11, H17.
-    unfold inductive_condition in Hu, Hw, Huw.
-    (* unfold inductive_condition, inductive_condition_untimed in Hu, Hw, Huw. *)
+    simpl in H7, H13, H19.
+    unfold inductive_condition_net in Hu, Hw, Huw.
     specialize (Hu t (s :: s1 :: states)).
     specialize (Hw t (s0 :: s1 :: states)).
     assert (Hlenplus2: forall {T1 T2 : Type} (a b : T1) (c d : T2) (l1 : list T1) (l2 : list T2), length l1 = length l2 -> length (a :: b :: l1) = length (c :: d :: l2)).
-    { intros. simpl. rewrite H2. reflexivity. }
-    specialize (Hu (Hlenplus2 _ _ s s1 u a states neighbors H0)).
-    specialize (Hw (Hlenplus2 _ _ s0 s1 w a states neighbors H0)).
+    { intros. simpl. rewrite H4. reflexivity. }
+    specialize (Hu (Hlenplus2 _ _ s s1 u a states neighbors H2)).
+    specialize (Hw (Hlenplus2 _ _ s0 s1 w a states neighbors H2)).
     specialize (Huw t (s :: s0 :: nil) eq_refl).
     apply selective_inductive_condition_selects in Hu.
     apply selective_inductive_condition_selects in Hw.
@@ -497,66 +545,20 @@ Section SelectiveNet.
     apply Exists_cons in Huw.
     destruct Huw as [HIv | Huw].
     (* apply Exists_cons in Huw. *)
-    unfold updated_state, transfer_routes.
+    unfold updated_state_net, transfer_routes_net.
     simpl.
-    remember (fold_right Merge (I v)
-                (map (fun neighbor : V * S => F (fst neighbor, v) (snd neighbor))
+    remember (fold_right Merges (I v)
+                (map (fun neighbor : V * S => Fs (fst neighbor) v (snd neighbor))
                    (combine neighbors states))) as sM.
-    remember (merge_selectivity (F (u, v) s) (F (w, v) s0)) as Hselect_uw.
+    remember (merge_select (Fs u v s) (Fs w v s0)) as Hselect_uw.
     destruct Hselect_uw as [Hselectu | Hselectw].
-    rewrite <- merge_associativity.
+    rewrite merge_assoc.
     rewrite <- Hselectu.
-    remember (merge_selectivity (F (u, v) s) (F (a, v) s1)) as Hselect_ua.
+    remember (merge_select (Fs u v s) (Fs a v s1)) as Hselect_ua.
     destruct Hselect_ua as [Hselectu2 | Hselecta].
-    rewrite <- merge_associativity.
+    rewrite merge_assoc.
     rewrite <- Hselectu2.
-    remember (merge_selectivity (F (u, v) s) sM) as Hselect_um.
+    remember (merge_select (Fs u v s) sM) as Hselect_um.
     destruct Hselect_um as [Hselectu3 | Hselectm].
-    rewrite <- Hselectu3.
-    unfold transfer_routes in Hu.
-    assert (Hu':
-       A v (1 + t)
-         (updated_state v (combine (u :: a :: neighbors) (s :: s1 :: states)))).
-    + apply Hu.
-      * simpl. rewrite H0. reflexivity.
-      * simpl. rewrite combine_length. rewrite H0. rewrite PeanoNat.Nat.min_id.
-        rewrite map_length. reflexivity.
-      * apply Forall2_cons; assumption.
-    + assert (Hw':
-       A v (1 + t)
-         (updated_state v (combine (w :: a :: neighbors) (s0 :: s1 :: states)))).
-      * apply Hw; simpl.
-        { rewrite H0. reflexivity. }
-        { rewrite combine_length. rewrite H0. rewrite PeanoNat.Nat.min_id.
-        rewrite map_length. reflexivity. }
-        { apply Forall2_cons; assumption. }
-      *
-        simpl in Hneighbors.
-        specialize (Hneighbors eq_refl eq_refl (Forall2_nil _)).
-        unfold updated_state, transfer_routes in Hneighbors.
-        simpl in Hneighbors.
-        rewrite Forall_forall in Hpairs.
-        remember (merge_selectivity (F (u, v) a) (I v)) as Hselect.
-        destruct Hselect as [Ha | HIv].
-        * rewrite <- Ha.
-      specialize (Hneighbors t nil). simpl in Hneighbors.
-      unfold inductive_condition_untimed.
-      intros Hlen Hpreds.
-      unfold updated_state.
-      simpl.
-    - simpl in Hneighbors.
-    rewrite (Forall_forall _ neighbors) in Hallpairs.
-    intros t states Hstateslen.
-    simpl in Hstateslen.
-    induction states.
-    - inversion Hstateslen.
-    - inversion Hstateslen.
-    unfold inductive_condition_untimed.
-    rewrite combine_length.
-    rewrite map_length.
-    rewrite Hstateslen.
-    rewrite PeanoNat.Nat.min_id.
-    intros.
-    simpl in H0.
     Abort.
 End SelectiveNet.
