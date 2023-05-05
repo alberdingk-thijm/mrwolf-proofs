@@ -434,21 +434,129 @@ Section SelectiveNet.
   Qed.
 
   Lemma selective_neighbor_pairs_cover_selective_neighbors :
-    forall v u1 u2 u3,
-      (inductive_condition v (u1 :: u2 :: nil)) ->
-      (inductive_condition v (u2 :: u3 :: nil)) ->
-      (inductive_condition v (u1 :: u3 :: nil)) ->
-      (inductive_condition v (u1 :: u2 :: u3 :: nil)).
+    forall v u w neighbors,
+      inductive_condition v (u :: neighbors) ->
+      inductive_condition v (w :: neighbors) ->
+      inductive_condition v (u :: w :: nil)  ->
+      inductive_condition v (u :: w :: neighbors).
   Proof.
-    intros v u1 u2 u3 H12 H23 H13.
-    unfold inductive_condition in *.
-    intros t states Hstateslen.
+    intros v u w neighbors.
+    induction neighbors; intros Hu Hw Huw t states Hstateslen.
+    - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
+      inversion Hstateslen.
+      rewrite length_zero_iff_nil in H0.
+      subst.
+      simpl.
+      unfold inductive_condition_untimed.
+      simpl.
+      intros.
+      inversion H0.
+      subst.
+      inversion H6.
+      subst.
+      simpl in H4, H5.
+      unfold inductive_condition, inductive_condition_untimed in Hu, Hw, Huw.
+      specialize (Hu t (s :: nil) eq_refl eq_refl).
+      specialize (Hw t (s0 :: nil) eq_refl eq_refl).
+      specialize (Huw t (s :: s0 :: nil) eq_refl eq_refl).
+      simpl in Hu, Hw, Huw.
+      apply Hw in H6.
+      clear H.
+      assert (H: Forall2 (fun m p => p (snd m)) ((u, s) :: nil) (A u t :: nil)).
+      { apply Forall2_cons. assumption. apply Forall2_nil. }
+      apply Hu in H.
+      apply Huw.
+      apply Forall2_cons.
+      assumption.
+      apply Forall2_cons.
+      assumption.
+      assumption.
+  - do 3 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
+    inversion Hstateslen.
     unfold inductive_condition_untimed.
+    intros.
+    inversion H1.
+    inversion H7.
+    inversion H13.
+    subst.
+    simpl in H5, H11, H17.
+    unfold inductive_condition in Hu, Hw, Huw.
+    (* unfold inductive_condition, inductive_condition_untimed in Hu, Hw, Huw. *)
+    specialize (Hu t (s :: s1 :: states)).
+    specialize (Hw t (s0 :: s1 :: states)).
+    assert (Hlenplus2: forall {T1 T2 : Type} (a b : T1) (c d : T2) (l1 : list T1) (l2 : list T2), length l1 = length l2 -> length (a :: b :: l1) = length (c :: d :: l2)).
+    { intros. simpl. rewrite H2. reflexivity. }
+    specialize (Hu (Hlenplus2 _ _ s s1 u a states neighbors H0)).
+    specialize (Hw (Hlenplus2 _ _ s0 s1 w a states neighbors H0)).
+    specialize (Huw t (s :: s0 :: nil) eq_refl).
+    apply selective_inductive_condition_selects in Hu.
+    apply selective_inductive_condition_selects in Hw.
+    apply selective_inductive_condition_selects in Huw.
+    apply Exists_cons in Hu.
+    apply Exists_cons in Hw.
+    apply Exists_cons in Huw.
+    destruct Huw as [HIv | Huw].
+    (* apply Exists_cons in Huw. *)
+    unfold updated_state, transfer_routes.
+    simpl.
+    remember (fold_right Merge (I v)
+                (map (fun neighbor : V * S => F (fst neighbor, v) (snd neighbor))
+                   (combine neighbors states))) as sM.
+    remember (merge_selectivity (F (u, v) s) (F (w, v) s0)) as Hselect_uw.
+    destruct Hselect_uw as [Hselectu | Hselectw].
+    rewrite <- merge_associativity.
+    rewrite <- Hselectu.
+    remember (merge_selectivity (F (u, v) s) (F (a, v) s1)) as Hselect_ua.
+    destruct Hselect_ua as [Hselectu2 | Hselecta].
+    rewrite <- merge_associativity.
+    rewrite <- Hselectu2.
+    remember (merge_selectivity (F (u, v) s) sM) as Hselect_um.
+    destruct Hselect_um as [Hselectu3 | Hselectm].
+    rewrite <- Hselectu3.
+    unfold transfer_routes in Hu.
+    assert (Hu':
+       A v (1 + t)
+         (updated_state v (combine (u :: a :: neighbors) (s :: s1 :: states)))).
+    + apply Hu.
+      * simpl. rewrite H0. reflexivity.
+      * simpl. rewrite combine_length. rewrite H0. rewrite PeanoNat.Nat.min_id.
+        rewrite map_length. reflexivity.
+      * apply Forall2_cons; assumption.
+    + assert (Hw':
+       A v (1 + t)
+         (updated_state v (combine (w :: a :: neighbors) (s0 :: s1 :: states)))).
+      * apply Hw; simpl.
+        { rewrite H0. reflexivity. }
+        { rewrite combine_length. rewrite H0. rewrite PeanoNat.Nat.min_id.
+        rewrite map_length. reflexivity. }
+        { apply Forall2_cons; assumption. }
+      *
+        simpl in Hneighbors.
+        specialize (Hneighbors eq_refl eq_refl (Forall2_nil _)).
+        unfold updated_state, transfer_routes in Hneighbors.
+        simpl in Hneighbors.
+        rewrite Forall_forall in Hpairs.
+        remember (merge_selectivity (F (u, v) a) (I v)) as Hselect.
+        destruct Hselect as [Ha | HIv].
+        * rewrite <- Ha.
+      specialize (Hneighbors t nil). simpl in Hneighbors.
+      unfold inductive_condition_untimed.
+      intros Hlen Hpreds.
+      unfold updated_state.
+      simpl.
+    - simpl in Hneighbors.
+    rewrite (Forall_forall _ neighbors) in Hallpairs.
+    intros t states Hstateslen.
     simpl in Hstateslen.
+    induction states.
+    - inversion Hstateslen.
+    - inversion Hstateslen.
+    unfold inductive_condition_untimed.
     rewrite combine_length.
     rewrite map_length.
     rewrite Hstateslen.
     rewrite PeanoNat.Nat.min_id.
     intros.
+    simpl in H0.
     Abort.
 End SelectiveNet.
