@@ -1,6 +1,7 @@
 (* Modular network inference *)
 Require Import Coq.Init.Nat.
 Require Import Coq.Lists.List.
+Require Import Coq.Sorting.Permutation.
 Require Import Coq.Program.Basics.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
@@ -136,6 +137,29 @@ Section Net.
 
   Definition updated_state {V S : Type} `{H: Net V S} (node : V) (neighbors : list (V * S)) : S :=
     fold_right Merge (I node) (transfer_routes node neighbors).
+
+  Lemma state_updates_comm {V S : Type} `{H: Net V S} :
+    forall (v : V) (neighbors1 : list (V * S)) (neighbors2 : list (V * S)),
+      Permutation neighbors1 neighbors2 ->
+      updated_state v neighbors1 = updated_state v neighbors2.
+  Proof.
+    intros v neighbors1.
+    induction neighbors1; intros.
+    - apply Permutation_nil in H0. subst. reflexivity.
+    - destruct neighbors2.
+      + apply Permutation_sym in H0. apply Permutation_nil_cons in H0.
+        inversion H0.
+      + unfold updated_state in *. simpl.
+        inversion H0; subst.
+        * rewrite (IHneighbors1 neighbors2 H2). reflexivity.
+        * simpl. rewrite merge_assoc. rewrite merge_assoc.
+          replace (Merge (F (fst a) v (snd a)) (F (fst p) v (snd p)))
+                    with (Merge (F (fst p) v (snd p)) (F (fst a) v (snd a))).
+          2: apply merge_comm.
+          reflexivity.
+        * simpl.
+          admit.
+  Admitted.
 
   (* A helper definition for writing out the inductive condition with times
      erased: all invariants are specified as [S -> Prop] functions. *)
@@ -510,82 +534,48 @@ Section SelectiveNet.
   Qed.
 
   Lemma selective_neighbor_pairs_cover_selective_neighbors {V S : Type} `{H: SelectiveNet V S}:
-    forall v u w neighbors,
-      inductive_cond v (u :: neighbors) ->
-      inductive_cond v (w :: neighbors) ->
-      inductive_cond v (u :: w :: nil)  ->
-      inductive_cond v (u :: w :: neighbors).
+    forall v u neighbors,
+      inductive_cond v (neighbors) ->
+      inductive_cond v (u :: nil)  ->
+      inductive_cond v (u :: neighbors).
   Proof.
-    intros v u w neighbors.
-    induction neighbors as [| z neighbors]; intros Hu Hw Huw t states Hstateslen.
+    intros v u neighbors.
+    induction neighbors as [| z neighbors]; intros Hneighbors Hu t states Hstateslen.
     - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
-      inversion Hstateslen.
-      rewrite length_zero_iff_nil in H2.
-      subst.
       simpl.
       unfold inductive_cond_untimed.
       simpl.
       intros.
       inversion H2.
       subst.
-      inversion H8.
-      subst.
-      simpl in H6, H7.
-      unfold inductive_cond, inductive_cond_untimed in Hu, Hw, Huw.
+      simpl in H6.
       specialize (Hu t (s :: nil) eq_refl eq_refl).
-      specialize (Hw t (s0 :: nil) eq_refl eq_refl).
-      specialize (Huw t (s :: s0 :: nil) eq_refl eq_refl).
-      simpl in Hu, Hw, Huw.
-      specialize (Hw H8).
-      clear H1.
-      assert (Huh: Forall2 (fun m p => p (snd m)) ((u, s) :: nil) (A u t :: nil)).
-      { apply Forall2_cons. assumption. apply Forall2_nil. }
-      specialize (Hu Huh).
-      apply Huw.
-      apply Forall2_cons.
-      assumption.
-      apply Forall2_cons.
-      assumption.
-      assumption.
-  - do 3 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
+      clear H1 H8.
+      apply Hu.
+      apply H2.
+  - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
     inversion Hstateslen.
     unfold inductive_cond_untimed.
     intros.
     inversion H3.
     inversion H9.
-    inversion H15.
     subst.
-    simpl in H7, H13, H19.
-    unfold inductive_cond in Hu, Hw, Huw.
-    specialize (Hu t (s :: s1 :: states)).
-    specialize (Hw t (s0 :: s1 :: states)).
-    assert (Hlenplus2: forall {T1 T2 : Type} (a b : T1) (c d : T2) (l1 : list T1) (l2 : list T2), length l1 = length l2 -> length (a :: b :: l1) = length (c :: d :: l2)).
-    { intros. simpl. rewrite H4. reflexivity. }
-    specialize (Hu (Hlenplus2 _ _ s s1 u z states neighbors H2)).
-    specialize (Hw (Hlenplus2 _ _ s0 s1 w z states neighbors H2)).
-    specialize (Huw t (s :: s0 :: nil) eq_refl).
-    (* apply selective_inductive_cond_selects in Hu. *)
-    (* apply selective_inductive_cond_selects in Hw. *)
-    (* apply selective_inductive_cond_selects in Huw. *)
-    (* do 3 (simpl in Hu; rewrite Exists_cons in Hu). *)
-    (* do 3 (simpl in Hw; rewrite Exists_cons in Hw). *)
-    (* do 3 (simpl in Huw; rewrite Exists_cons in Huw). *)
-    unfold updated_state, transfer_routes.
+    simpl in H7, H13.
+    unfold inductive_cond in Hneighbors, Hu.
+    specialize (Hneighbors t (s0 :: states)).
+    specialize (Hu t (s :: nil)).
+    (* assert (Hlenplus2: forall {T1 T2 : Type} (a b : T1) (c d : T2) (l1 : list T1) (l2 : list T2), length l1 = length l2 -> length (a :: b :: l1) = length (c :: d :: l2)). *)
+    (* { intros. simpl. rewrite H4. reflexivity. } *)
+    simpl in Hstateslen.
+    simpl in Hu.
+    specialize (Hu eq_refl).
+    simpl in Hneighbors.
+    apply eq_S in H2.
+    specialize (Hneighbors H2).
     simpl.
-    remember (fold_right Merge (I v)
-                (map (fun neighbor : V * S => F (fst neighbor) v (snd neighbor))
-                   (combine neighbors states))) as sM.
-    remember (merge_select (F u v s) (F w v s0)) as Hselect_uw.
-    remember (merge_select (F u v s) (F z v s1)) as Hselect_ua.
-    remember (merge_select (F u v s) sM) as Hselect_um.
-    (* now we have a whole bunch of cases for selectivity above the line *)
-    destruct Hselect_uw as [Hselectu | Hselectw];
-    destruct Hselect_ua as [Hselectu2 | Hselectz];
-    destruct Hselect_um as [Hselectu3 | Hselectm].
-    + rewrite merge_assoc.
-      rewrite <- Hselectu.
-      rewrite merge_assoc.
-      rewrite <- Hselectu2.
-      rewrite <- Hselectu3.
-    Abort.
+    unfold inductive_cond_untimed in Hneighbors.
+    unfold updated_state in *.
+    simpl.
+  Abort.
+
 End SelectiveNet.
