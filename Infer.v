@@ -64,6 +64,38 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma combine_nil2 :
+  forall {T1 T2 : Type} (l1 : list T1) (l2 : list T2),
+    length l1 = length l2 ->
+    combine l1 l2 = nil ->
+    l1 = nil /\ l2 = nil.
+Proof.
+  intros.
+  split.
+  - destruct l1 as [| ? l1].
+    + reflexivity.
+    + destruct l2 as [| ? l2].
+      * inversion H.
+      * inversion H0.
+  - destruct l2 as [| ? l2].
+    + reflexivity.
+    + destruct l1 as [| ? l1].
+      * inversion H.
+      * inversion H0.
+Qed.
+
+Lemma Permutation_combine :
+  forall {T1 T2 : Type} (l11 l12 : list T1) (l21 l22 : list T2),
+    length l11 = length l12 ->
+    length l21 = length l22 ->
+    length l11 = length l21 ->
+    Permutation (combine l11 l21) (combine l12 l22) ->
+    Permutation l11 l12 /\ Permutation l21 l22.
+Proof.
+  intros.
+Admitted.
+
+
 Lemma Forall_forall2 :
   forall { T1 T2 : Type } (R : T1 -> T2 -> Prop) (l1 : list T1) (l2 : list T2),
     length l1 = length l2 ->
@@ -173,6 +205,116 @@ Section Net.
       inductive_cond_untimed
         n (A n (1 + t))
         (combine neighbors states) (map (fun m => A m t) neighbors).
+
+  Lemma inductive_cond_comm {V S : Type} `{H: Net V S} :
+    forall (v : V) (neighbors1 : list V) (neighbors2 : list V),
+      Permutation neighbors1 neighbors2 ->
+      inductive_cond v neighbors1 <-> inductive_cond v neighbors2.
+  Proof.
+    intros.
+    induction H0.
+    - split; intro; assumption.
+    - split; intro; clear IHPermutation.
+      (* We need to prove that, if the inductive condition holds for neighbors [x :: l],
+         then it will hold for neighbors [x :: l'] when l' is a permutation of l.
+         The inductive hypothesis isn't useful here, since we can't use l or l' to understand
+         the result for [x :: l] and [x :: l'].
+         Instead, we need to be able to claim that we have two state permutations such that
+         [Permutation (combine l states) (combine l' states')], so that the invariants all align. *)
+      + intros t states Hstateslen.
+        destruct states as [| ? states]; try solve[inversion Hstateslen].
+        unfold inductive_cond_untimed.
+        intros.
+        simpl in *.
+        inversion Hstateslen.
+        unfold inductive_cond, inductive_cond_untimed in H1.
+        apply Forall2_cons_iff in H3.
+        destruct H3.
+        (* assert (Hstates: exists (l' : list V) (states' : list S), Permutation (combine l states) (combine l' states')). *)
+        (* { exists l. exists states. apply Permutation_refl. } *)
+        (* destruct Hstates as [l'' [states' Hnbrs]]. *)
+        (* apply (Permutation_combine _ _) in Hnbrs. *)
+        (* destruct Hnbrs as [Hl'' Hstates]. *)
+        (* specialize (H1 t (s :: states')). *)
+        (* assert (H0' := H0). *)
+        (* apply Permutation_length in H0'. *)
+        (* assert (Hstates' := Hstates). *)
+        (* apply Permutation_length in Hstates'. *)
+        (* simpl in H1. *)
+        (* rewrite combine_length in H1. *)
+        (* rewrite map_length in H1. *)
+        (* rewrite <- Hstates' in H1. *)
+        (* rewrite H0' in H1. *)
+        (* rewrite H5 in H1. *)
+        (* rewrite PeanoNat.Nat.min_id in H1. *)
+        (* specialize (H1 eq_refl eq_refl). *)
+        (* rewrite (state_updates_comm _ _ ((x, s) :: (combine l states'))). *)
+        (* apply H1. *)
+        (* constructor. *)
+        (* assumption. *)
+        (* admit. *)
+        (* constructor. *)
+        admit.
+      + admit.
+    - split; intro.
+      + intros t states Hstateslen.
+        do 2 (destruct states as [| ? states]; try solve[inversion Hstateslen]).
+        unfold inductive_cond_untimed.
+        intros.
+        unfold inductive_cond, inductive_cond_untimed in H0.
+        specialize (H0 t (s0 :: s :: states)).
+        simpl in H0.
+        inversion Hstateslen.
+        rewrite map_length in H0.
+        rewrite combine_length in H0.
+        rewrite H4 in H0.
+        rewrite PeanoNat.Nat.min_id in H0.
+        specialize (H0 eq_refl eq_refl).
+        simpl in H2.
+        rewrite (state_updates_comm _ _ (combine (y :: x :: l) (s0 :: s :: states))).
+        apply H0.
+        rewrite Forall2_cons_iff in H2.
+        destruct H2.
+        rewrite Forall2_cons_iff in H3.
+        destruct H3.
+        apply Forall2_cons.
+        assumption.
+        apply Forall2_cons.
+        assumption.
+        assumption.
+        simpl.
+        constructor.
+      + intros t states Hstateslen.
+        do 2 (destruct states as [| ? states]; try solve[inversion Hstateslen]).
+        unfold inductive_cond_untimed.
+        intros.
+        unfold inductive_cond, inductive_cond_untimed in H0.
+        specialize (H0 t (s0 :: s :: states)).
+        simpl in H0.
+        inversion Hstateslen.
+        rewrite map_length in H0.
+        rewrite combine_length in H0.
+        rewrite H4 in H0.
+        rewrite PeanoNat.Nat.min_id in H0.
+        specialize (H0 eq_refl eq_refl).
+        simpl in H2.
+        rewrite (state_updates_comm _ _ (combine (x :: y :: l) (s0 :: s :: states))).
+        apply H0.
+        rewrite Forall2_cons_iff in H2.
+        destruct H2.
+        rewrite Forall2_cons_iff in H3.
+        destruct H3.
+        apply Forall2_cons.
+        assumption.
+        apply Forall2_cons.
+        assumption.
+        assumption.
+        simpl.
+        constructor.
+    - split; intro.
+      + apply IHPermutation2. apply IHPermutation1. assumption.
+      + apply IHPermutation1. apply IHPermutation2. assumption.
+  Admitted.
 End Net.
 
 Section NetExamples.
@@ -529,7 +671,7 @@ Section SelectiveNet.
 
   Lemma selective_neighbor_pairs_cover_selective_neighbors {V S : Type} `{H: SelectiveNet V S}:
     forall v u neighbors,
-      inductive_cond v (neighbors) ->
+      inductive_cond v neighbors ->
       inductive_cond v (u :: nil)  ->
       inductive_cond v (u :: neighbors).
   Proof.
@@ -549,6 +691,7 @@ Section SelectiveNet.
       apply H2.
   - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
     inversion Hstateslen.
+    unfold inductive_cond in IHneighbors.
     unfold inductive_cond_untimed.
     intros.
     inversion H3.
