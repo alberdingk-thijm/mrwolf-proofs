@@ -143,23 +143,17 @@ Section Net.
       Permutation neighbors1 neighbors2 ->
       updated_state v neighbors1 = updated_state v neighbors2.
   Proof.
-    intros v neighbors1.
-    induction neighbors1; intros.
-    - apply Permutation_nil in H0. subst. reflexivity.
-    - destruct neighbors2.
-      + apply Permutation_sym in H0. apply Permutation_nil_cons in H0.
-        inversion H0.
-      + unfold updated_state in *. simpl.
-        inversion H0; subst.
-        * rewrite (IHneighbors1 neighbors2 H2). reflexivity.
-        * simpl. rewrite merge_assoc. rewrite merge_assoc.
-          replace (Merge (F (fst a) v (snd a)) (F (fst p) v (snd p)))
-                    with (Merge (F (fst p) v (snd p)) (F (fst a) v (snd a))).
-          2: apply merge_comm.
-          reflexivity.
-        * simpl.
-          admit.
-  Admitted.
+    intros.
+    induction H0.
+    - constructor.
+    - unfold updated_state in *. simpl. rewrite IHPermutation. reflexivity.
+    - unfold updated_state in *. simpl. rewrite merge_assoc. rewrite merge_assoc.
+      replace (Merge (F (fst y) v (snd y)) (F (fst x) v (snd x)))
+                with (Merge (F (fst x) v (snd x)) (F (fst y) v (snd y))).
+      2: apply merge_comm.
+      reflexivity.
+    - congruence.
+  Qed.
 
   (* A helper definition for writing out the inductive condition with times
      erased: all invariants are specified as [S -> Prop] functions. *)
@@ -567,15 +561,40 @@ Section SelectiveNet.
     (* assert (Hlenplus2: forall {T1 T2 : Type} (a b : T1) (c d : T2) (l1 : list T1) (l2 : list T2), length l1 = length l2 -> length (a :: b :: l1) = length (c :: d :: l2)). *)
     (* { intros. simpl. rewrite H4. reflexivity. } *)
     simpl in Hstateslen.
-    simpl in Hu.
-    specialize (Hu eq_refl).
-    simpl in Hneighbors.
-    apply eq_S in H2.
-    specialize (Hneighbors H2).
+    unfold inductive_cond_untimed in Hneighbors, Hu.
+    simpl in Hu, Hneighbors.
+    specialize (Hu eq_refl eq_refl).
+    rewrite map_length in Hneighbors.
+    rewrite combine_length in Hneighbors.
+    rewrite H2 in Hneighbors.
+    rewrite PeanoNat.Nat.min_id in Hneighbors.
+    specialize (Hneighbors eq_refl eq_refl).
+    rewrite Forall2_cons_iff in Hneighbors.
+    rewrite Forall2_cons_iff in Hu.
+    simpl in Hu, Hneighbors.
     simpl.
-    unfold inductive_cond_untimed in Hneighbors.
+    (* rewrite (state_updates_comm v ((u, s) :: (z, s0) :: combine neighbors states) ((z, s0) :: (u, s) :: combine neighbors states)). *)
+    (* 2: constructor. *)
+    (* unfold inductive_cond, inductive_cond_untimed in IHneighbors. *)
     unfold updated_state in *.
     simpl.
+    simpl in Hneighbors, Hu.
+    remember (merge_select (F u v s) (F z v s0)) as Huz.
+    destruct Huz.
+    + rewrite merge_assoc. rewrite <- e.
+      unfold inductive_cond, inductive_cond_untimed in IHneighbors.
+      replace (Merge (F u v s) (fold_right Merge (I v) (transfer_routes v (combine neighbors states))))
+                with (updated_state v (combine (u :: neighbors) (s :: states))).
+      2: reflexivity.
+      (* apply IHneighbors; try congruence. *)
+      (* applying IHneighbors gets us into trouble, as our hypotheses refer to [t] but we have a goal with [t0] *)
+      (* intros. *)
+      (* simpl in IHneighbors. *)
+      (* unfold updated_state in IHneighbors. *)
+      admit.
+    + rewrite merge_assoc. rewrite <- e.
+      apply Hneighbors.
+      split; assumption.
   Abort.
 
 End SelectiveNet.
