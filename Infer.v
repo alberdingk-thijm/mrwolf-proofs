@@ -198,6 +198,135 @@ Section Net.
     (* then the node's invariant holds on the updated state *)
     (node_invariant (updated_state node neighbors)).
 
+  Lemma inductive_cond_untimed_comm {V S : Type} `{H: Net V S} :
+    forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list (V * S)) (invs1 invs2 : list (φ S)),
+      Permutation neighbors1 neighbors2 ->
+      Permutation invs1 invs2 ->
+      Permutation (combine neighbors1 invs1) (combine neighbors2 invs2) ->
+      inductive_cond_untimed v inv neighbors1 invs1 <-> inductive_cond_untimed v inv neighbors2 invs2.
+  Proof.
+    intros v inv neighbors1 neighbors2 invs1 invs2 HPermNeighbors HPermInvs HPermCombined.
+    induction HPermNeighbors; induction HPermInvs.
+    - (* nil cases *)
+      split; intro; assumption.
+    - split; intro; intros Hstateslen; inversion Hstateslen.
+    - split; intro; intros Hstateslen; inversion Hstateslen.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen;
+        symmetry in H2; rewrite length_zero_iff_nil in H2; subst.
+      + eapply perm_trans in HPermInvs2. 2: apply HPermInvs1.
+        apply Permutation_sym in HPermInvs2.
+        apply Permutation_nil in HPermInvs2. subst.
+        apply (H0 eq_refl Hnbrs).
+      + eapply perm_trans in HPermInvs2. 2: apply HPermInvs1.
+        apply Permutation_nil in HPermInvs2. subst.
+        apply (H0 eq_refl Hnbrs).
+    - split; intro; intro Hstateslen; inversion Hstateslen.
+    - (* skip cases *)
+      split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + unfold inductive_cond_untimed in H0.
+        assert (HPermNeighbors' := HPermNeighbors).
+        apply Permutation_length in HPermNeighbors'.
+        assert (HPermInvs' := HPermInvs).
+        apply Permutation_length in HPermInvs'.
+        simpl in H0.
+        rewrite HPermNeighbors' in H0.
+        rewrite H2 in H0.
+        rewrite HPermInvs' in H0.
+        specialize (H0 eq_refl).
+        rewrite (state_updates_comm _ (x :: l') (x :: l)).
+        2: constructor; apply Permutation_sym; assumption.
+        apply H0.
+        inversion Hnbrs.
+        subst.
+        constructor; try assumption.
+        simpl in HPermCombined.
+        apply Permutation_cons_inv in HPermCombined.
+        rewrite Forall_forall2; try congruence.
+        rewrite Forall_forall2 in H7; try assumption.
+        apply Permutation_sym in HPermCombined.
+        eapply Permutation_Forall in HPermCombined.
+        apply HPermCombined.
+        apply H7.
+      + unfold inductive_cond_untimed in H0.
+        assert (HPermNeighbors' := HPermNeighbors).
+        apply Permutation_length in HPermNeighbors'.
+        assert (HPermInvs' := HPermInvs).
+        apply Permutation_length in HPermInvs'.
+        simpl in H0.
+        rewrite <- HPermInvs' in H0.
+        rewrite <- H2 in H0.
+        rewrite HPermNeighbors' in H0.
+        specialize (H0 eq_refl).
+        rewrite (state_updates_comm _ (x :: l) (x :: l')).
+        2: constructor; assumption.
+        apply H0.
+        rewrite Forall_forall2 in Hnbrs; try assumption.
+        rewrite Forall_forall2.
+        2: { simpl. rewrite <- HPermNeighbors'. rewrite H2. rewrite HPermInvs'. reflexivity. }
+        eapply Permutation_Forall in HPermCombined.
+        apply HPermCombined.
+        apply Hnbrs.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + unfold inductive_cond_untimed in H0.
+        assert (HPermNeighbors' := HPermNeighbors).
+        apply Permutation_length in HPermNeighbors'.
+        simpl in H0.
+        rewrite <- H2 in H0.
+        rewrite <- HPermNeighbors' in H0.
+        specialize (H0 eq_refl).
+        rewrite (state_updates_comm _ (x :: l') (x :: l)).
+        2: constructor; apply Permutation_sym; assumption.
+        apply H0.
+        rewrite Forall_forall2.
+        2: { simpl. simpl in Hstateslen. rewrite HPermNeighbors'. assumption. }
+        rewrite Forall_forall2 in Hnbrs; try assumption.
+        apply Permutation_sym in HPermCombined.
+        eapply Permutation_Forall in HPermCombined.
+        apply HPermCombined.
+        apply Hnbrs.
+      + unfold inductive_cond_untimed in H0.
+        assert (HPermNeighbors' := HPermNeighbors).
+        apply Permutation_length in HPermNeighbors'.
+        simpl in H0.
+        rewrite <- H2 in H0.
+        rewrite <- HPermNeighbors' in H0.
+        specialize (H0 eq_refl).
+        rewrite (state_updates_comm _ (x :: l) (x :: l')).
+        2: constructor; assumption.
+        apply H0.
+        rewrite Forall_forall2.
+        2: { simpl. simpl in Hstateslen. rewrite <- HPermNeighbors'. assumption. }
+        rewrite Forall_forall2 in Hnbrs; try assumption.
+        eapply Permutation_Forall in HPermCombined.
+        apply HPermCombined.
+        apply Hnbrs.
+    - admit.
+    - (* swap cases *)
+      split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - (* trans cases *)
+      split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+    - split; intro; intros Hstateslen Hnbrs; inversion Hstateslen.
+      + admit.
+      + admit.
+  Admitted.
+
   (* The original inductive condition for a node [n]. *)
   Definition inductive_cond {V S : Type} `{H: Net V S} (n : V) (neighbors : list V) :=
     forall (t : nat) (states : list S),
@@ -228,6 +357,8 @@ Section Net.
         simpl in *.
         inversion Hstateslen.
         unfold inductive_cond, inductive_cond_untimed in H1.
+        assert (Hstates: exists (states' : list S), Permutation states states' -> Permutation (combine l states) (combine l' states')).
+        { exists states. apply Permutation_refl. }
         apply Forall2_cons_iff in H3.
         destruct H3.
         (* assert (Hstates: exists (l' : list V) (states' : list S), Permutation (combine l states) (combine l' states')). *)
