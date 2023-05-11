@@ -64,6 +64,25 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma combine_app :
+  forall {T1 T2 : Type} (l1 l2 : list T1) (l3 l4 : list T2),
+    length l1 = length l3 ->
+    length l2 = length l4 ->
+    combine (l1 ++ l2) (l3 ++ l4) = combine l1 l3 ++ combine l2 l4.
+Proof.
+  induction l1; intros.
+  - simpl.
+    symmetry in H.
+    rewrite length_zero_iff_nil in H.
+    subst.
+    reflexivity.
+  - destruct l3 as [| ? l3]; inversion H.
+    specialize (IHl1 l2 l3 l4 H2 H0).
+    simpl.
+    rewrite IHl1.
+    reflexivity.
+Qed.
+
 Lemma combine_nil2 :
   forall {T1 T2 : Type} (l1 : list T1) (l2 : list T2),
     length l1 = length l2 ->
@@ -201,6 +220,36 @@ Proof.
   2: apply H0.
   simpl in H1.
   apply H1.
+Qed.
+
+Lemma Forall2_app :
+  forall { T1 T2 : Type }
+    (l1 l2 : list T1) (l3 l4 : list T2)
+    (P : T1 -> T2 -> Prop),
+    length l1 = length l3 ->
+    length l2 = length l4 ->
+    Forall2 P (l1 ++ l2) (l3 ++ l4) ->
+    Forall2 P l1 l3 /\ Forall2 P l2 l4.
+Proof.
+  intros.
+  generalize dependent l4.
+  generalize dependent l3.
+  generalize dependent l2.
+  induction l1; intros.
+  - symmetry in H.
+    rewrite length_zero_iff_nil in H.
+    subst.
+    simpl in H1.
+    split; (constructor || assumption).
+  - destruct l3 as [| ? l3]; try solve[inversion H].
+    inversion H.
+    specialize (IHl1 l2 l3 H3 l4 H0).
+    simpl in H1.
+    apply Forall2_cons_iff in H1.
+    destruct H1.
+    specialize (IHl1 H2).
+    destruct IHl1.
+    split; ((constructor; assumption) || (repeat assumption)).
 Qed.
 
 Lemma fold_right_map :
@@ -698,30 +747,20 @@ Section SelectiveNet.
         right. right. rewrite <- Hfold. assumption.
   Qed.
 
-  Lemma merge_False {V S : Type} `{H: SelectiveNet V S} :
+  Lemma merge_all_False {V S : Type} `{H: SelectiveNet V S} :
     forall s states P,
-      ~ P (fold_right Merge s states) ->
-      ~ (Exists P (s :: states)).
+      ~ (Exists P (s :: states)) ->
+      ~ P (fold_right Merge s states).
   Proof.
-    (* this is wrong! the property could've held for another node that was *not* chosen... *)
     intros.
-    rewrite Exists_exists.
+    rewrite Exists_exists in H1.
     intro contra.
     apply H1.
-    induction states.
-    - simpl. simpl in contra.
-      inversion contra.
-      assumption.
-      apply Exists_nil in H3.
-      contradiction.
-    - simpl.
-      inversion contra.
-      subst.
-
-    apply Exists_exists in contra.
-    destruct contra.
-    destruct H2.
-
+    exists (fold_right Merge s states).
+    split.
+    - apply fold_right_merge.
+    - apply contra.
+  Qed.
 
   Lemma fold_right_merge_idemp  {V S : Type} `{H: SelectiveNet V S}:
     forall s states,
@@ -828,6 +867,66 @@ Section SelectiveNet.
     injection Hstateslen as Hstateslen.
     specialize (H4 Hstateslen H6).
     unfold updated_state.
+    simpl.
+    destruct (merge_select (F u v us) (fold_right Merge (I v) (transfer_routes v (combine neighbors states)))).
+    - unfold updated_state in H3.
+      simpl in H3.
+      simpl in H5.
+      destruct (merge_select (I v) (fold_right Merge (I v) (transfer_routes v (combine neighbors states)))).
+      + replace (Merge (I v) (fold_right Merge (I v) (transfer_routes v (combine neighbors states))))
+                      with (fold_right Merge (I v) ((I v) :: (transfer_routes v (combine neighbors states)))) in H8
+        by reflexivity.
+        rewrite fold_right_merge_idemp in H8.
+        rewrite H8 in H3.
+        apply H3.
+        split.
+        * assumption.
+        * constructor.
+      + rewrite H8.
+        rewrite merge_assoc.
+        rewrite (merge_comm (F u v us) (I v)).
+        rewrite <- merge_assoc.
+        rewrite <- H7.
+        rewrite merge_comm.
+        apply H3.
+        split.
+        * assumption.
+        * constructor.
+    - rewrite <- H7.
+      assumption.
+  Qed.
+
+  Lemma selective_inductive_cond_untimed_join {V S : Type} `{H: SelectiveNet V S}:
+    forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list V) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
+      length neighbors1 = length states1 ->
+      length neighbors1 = length invs1 ->
+      length neighbors2 = length states2 ->
+      length neighbors2 = length invs2 ->
+      inductive_cond_untimed v inv (combine neighbors1 states1) invs1 ->
+      inductive_cond_untimed v inv (combine neighbors2 states2) invs2 ->
+      inductive_cond_untimed v inv ((combine neighbors1 states1) ++ combine neighbors2 states2) (invs1 ++ invs2).
+  Proof.
+    intros.
+    unfold inductive_cond_untimed in *.
+    simpl.
+    intros Hstateslen Hnbrs.
+    apply Forall2_app in Hnbrs.
+    destruct Hnbrs as [Hnbrs1 Hnbrs2].
+    rewrite combine_length in H5, H6.
+    rewrite <- H1 in H5.
+    rewrite <- H3 in H6.
+    rewrite PeanoNat.Nat.min_id in H5, H6.
+    specialize (H5 H2 Hnbrs1).
+    specialize (H6 H4 Hnbrs2).
+    unfold updated_state.
+    unfold transfer_routes.
+    rewrite map_app.
+    rewrite fold_right_app.
+    destruct (merge_select (fold_right Merge (I v) (transfer_routes v (combine neighbors1 states1)))
+                           (fold_right Merge (I v) (transfer_routes v (combine neighbors2 states2)))).
+    - unfold updated_state in H5, H6.
+      rewrite H7 in H5.
+      unfold transfer_routes in H5.
     simpl.
     destruct (merge_select (F u v us) (fold_right Merge (I v) (transfer_routes v (combine neighbors states)))).
     - unfold updated_state in H3.
