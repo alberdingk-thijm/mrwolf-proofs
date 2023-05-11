@@ -84,15 +84,81 @@ Proof.
       * inversion H0.
 Qed.
 
-Lemma Permutation_combine :
-  forall {T1 T2 : Type} (l11 l12 : list T1) (l21 l22 : list T2),
-    length l11 = length l12 ->
-    length l21 = length l22 ->
-    length l11 = length l21 ->
-    Permutation (combine l11 l21) (combine l12 l22) ->
+Lemma Permutation_split :
+  forall {T1 T2 : Type} (l1 l2 : list (T1 * T2)) (l11 l12 : list T1) (l21 l22 : list T2),
+    Permutation l1 l2 ->
+    split l1 = (l11, l21) ->
+    split l2 = (l12, l22) ->
     Permutation l11 l12 /\ Permutation l21 l22.
 Proof.
+  (* intros T1 T2 l1. *)
+  (* induction l1; intros. *)
+  (* - simpl in H0. inversion H0. subst. *)
+  (*   apply Permutation_nil in H. *)
+  (*   subst. *)
+  (*   inversion H1. *)
+  (*   split; constructor. *)
+  (* - destruct l2. *)
+  (*   + apply Permutation_sym in H. apply Permutation_nil_cons in H. contradiction. *)
+  (*   +  *)
   intros.
+  generalize dependent l11.
+  generalize dependent l12.
+  generalize dependent l21.
+  generalize dependent l22.
+  induction H; intros.
+  - inversion H0.
+    inversion H1.
+    split; constructor.
+  - assert (Hlen := H).
+    apply Permutation_length in Hlen.
+    assert (H0' := H0).
+    assert (H1' := H1).
+    apply split_combine in H0.
+    apply split_combine in H1.
+    destruct l11; destruct l21; destruct l12; destruct l22; try inversion H0; inversion H1.
+    assert (Hlen12 : length (x :: l') = Datatypes.S (length l12)).
+    { rewrite <- split_length_l. rewrite H1'. simpl. reflexivity. }
+    assert (Hlen11 : length (x :: l) = Datatypes.S (length l11)).
+    { rewrite <- split_length_l. rewrite H0'. simpl. reflexivity. }
+    assert (Hlen22 : length (x :: l') = Datatypes.S (length l22)).
+    { rewrite <- split_length_r. rewrite H1'. simpl. reflexivity. }
+    assert (Hlen21 : length (x :: l) = Datatypes.S (length l21)).
+    { rewrite <- split_length_r. rewrite H0'. simpl. reflexivity. }
+    simpl in Hlen11, Hlen12, Hlen21, Hlen22.
+    injection Hlen12 as Hlen12.
+    injection Hlen11 as Hlen11.
+    injection Hlen22 as Hlen22.
+    injection Hlen21 as Hlen21.
+    subst.
+    inversion H5.
+    subst.
+    specialize (IHPermutation l22 l21 l12).
+    rewrite combine_split in IHPermutation; try congruence.
+    specialize (IHPermutation eq_refl l11).
+    rewrite combine_split in IHPermutation; try congruence.
+    specialize (IHPermutation eq_refl).
+    destruct IHPermutation.
+    split; constructor; assumption.
+  -
+    assert (H0' := H0).
+    assert (H1' := H1).
+    apply split_combine in H0.
+    apply split_combine in H1.
+    do 2 (destruct l11; destruct l21; destruct l12; destruct l22; try inversion H0; inversion H1).
+    subst.
+    inversion H7.
+    inversion H9.
+    inversion H10.
+    subst.
+    (* need to show that [l12 = l11] and [l22 = l21] by [H11]. *)
+    assert (Hl1: l12 = l11).
+    { admit. }
+    assert (Hl2: l22 = l21).
+    { admit. }
+    subst.
+    split; constructor.
+  - admit.
 Admitted.
 
 
@@ -317,34 +383,17 @@ Section Net.
       apply Permutation_sym.
       eassumption.
       3: apply H1.
-      3: {
-        apply Permutation_length in Hstates.
-        apply Permutation_length in H0.
-        rewrite H0.
-        rewrite Hstates in Hstateslen.
-        eassumption.
-      }
-      2: apply Permutation_map; apply Permutation_sym; assumption.
-    induction H0.
-    - split; intro; assumption.
-    - split; intro; clear IHPermutation.
+      apply Permutation_map; apply Permutation_sym; assumption.
+      eapply Permutation_split in Hstates.
+      2: apply combine_split.
+      3: apply combine_split.
+      destruct Hstates.
       (* We need to prove that, if the inductive condition holds for neighbors [x :: l],
          then it will hold for neighbors [x :: l'] when l' is a permutation of l.
          The inductive hypothesis isn't useful here, since we can't use l or l' to understand
          the result for [x :: l] and [x :: l'].
          Instead, we need to be able to claim that we have two state permutations such that
          [Permutation (combine l states) (combine l' states')], so that the invariants all align. *)
-      + intros t states Hstateslen.
-        destruct states as [| ? states]; try solve[inversion Hstateslen].
-        unfold inductive_cond_untimed.
-        intros.
-        simpl in *.
-        inversion Hstateslen.
-        unfold inductive_cond, inductive_cond_untimed in H1.
-        assert (Hstates: exists (states' : list S), Permutation states states' -> Permutation (combine l states) (combine l' states')).
-        { exists states. apply Permutation_refl. }
-        apply Forall2_cons_iff in H3.
-        destruct H3.
         (* assert (Hstates: exists (l' : list V) (states' : list S), Permutation (combine l states) (combine l' states')). *)
         (* { exists l. exists states. apply Permutation_refl. } *)
         (* destruct Hstates as [l'' [states' Hnbrs]]. *)
@@ -369,67 +418,7 @@ Section Net.
         (* assumption. *)
         (* admit. *)
         (* constructor. *)
-        admit.
-      + admit.
-    - split; intro.
-      + intros t states Hstateslen.
-        do 2 (destruct states as [| ? states]; try solve[inversion Hstateslen]).
-        unfold inductive_cond_untimed.
-        intros.
-        unfold inductive_cond, inductive_cond_untimed in H0.
-        specialize (H0 t (s0 :: s :: states)).
-        simpl in H0.
-        inversion Hstateslen.
-        rewrite map_length in H0.
-        rewrite combine_length in H0.
-        rewrite H4 in H0.
-        rewrite PeanoNat.Nat.min_id in H0.
-        specialize (H0 eq_refl eq_refl).
-        simpl in H2.
-        rewrite (state_updates_comm _ _ (combine (y :: x :: l) (s0 :: s :: states))).
-        apply H0.
-        rewrite Forall2_cons_iff in H2.
-        destruct H2.
-        rewrite Forall2_cons_iff in H3.
-        destruct H3.
-        apply Forall2_cons.
-        assumption.
-        apply Forall2_cons.
-        assumption.
-        assumption.
-        simpl.
-        constructor.
-      + intros t states Hstateslen.
-        do 2 (destruct states as [| ? states]; try solve[inversion Hstateslen]).
-        unfold inductive_cond_untimed.
-        intros.
-        unfold inductive_cond, inductive_cond_untimed in H0.
-        specialize (H0 t (s0 :: s :: states)).
-        simpl in H0.
-        inversion Hstateslen.
-        rewrite map_length in H0.
-        rewrite combine_length in H0.
-        rewrite H4 in H0.
-        rewrite PeanoNat.Nat.min_id in H0.
-        specialize (H0 eq_refl eq_refl).
-        simpl in H2.
-        rewrite (state_updates_comm _ _ (combine (x :: y :: l) (s0 :: s :: states))).
-        apply H0.
-        rewrite Forall2_cons_iff in H2.
-        destruct H2.
-        rewrite Forall2_cons_iff in H3.
-        destruct H3.
-        apply Forall2_cons.
-        assumption.
-        apply Forall2_cons.
-        assumption.
-        assumption.
-        simpl.
-        constructor.
-    - split; intro.
-      + apply IHPermutation2. apply IHPermutation1. assumption.
-      + apply IHPermutation1. apply IHPermutation2. assumption.
-  Admitted.
+  Abort.
 End Net.
 
 Section NetExamples.
@@ -806,7 +795,6 @@ Section SelectiveNet.
       apply H2.
   - do 2 try (destruct states as [| ? states]); try solve[inversion Hstateslen].
     inversion Hstateslen.
-    unfold inductive_cond in IHneighbors.
     unfold inductive_cond_untimed.
     intros.
     inversion H3.
@@ -826,24 +814,30 @@ Section SelectiveNet.
     rewrite combine_length in Hneighbors.
     rewrite H2 in Hneighbors.
     rewrite PeanoNat.Nat.min_id in Hneighbors.
-    specialize (Hneighbors eq_refl eq_refl).
-    rewrite Forall2_cons_iff in Hneighbors.
-    rewrite Forall2_cons_iff in Hu.
-    simpl in Hu, Hneighbors.
-    simpl.
+    specialize (Hneighbors eq_refl eq_refl H9).
     (* rewrite (state_updates_comm v ((u, s) :: (z, s0) :: combine neighbors states) ((z, s0) :: (u, s) :: combine neighbors states)). *)
     (* 2: constructor. *)
     (* unfold inductive_cond, inductive_cond_untimed in IHneighbors. *)
     unfold updated_state in *.
     simpl.
     simpl in Hneighbors, Hu.
-    remember (merge_select (F u v s) (F z v s0)) as Huz.
-    destruct Huz.
-    + rewrite merge_assoc. rewrite <- e.
-      unfold inductive_cond, inductive_cond_untimed in IHneighbors.
+    remember (merge_select (F u v s) (Merge (F z v s0)
+                    (fold_right Merge (I v)
+                       (transfer_routes v (combine neighbors states))))) as Hz.
+    destruct Hsel as [Hselu Hsel].
+    + rewrite <- e.
       replace (Merge (F u v s) (fold_right Merge (I v) (transfer_routes v (combine neighbors states))))
                 with (updated_state v (combine (u :: neighbors) (s :: states))).
       2: reflexivity.
+      remember (merge_select (F u v s) (updated_state v (combine neighbors states))) as Hus.
+      destruct Hus.
+      * unfold updated_state.
+        simpl.
+        unfold updated_state in e0.
+        rewrite <- e0.
+        admit.
+      * unfold updated_state. simpl. unfold updated_state in e0.
+        rewrite <- e0.
       (* apply IHneighbors; try congruence. *)
       (* applying IHneighbors gets us into trouble, as our hypotheses refer to [t] but we have a goal with [t0] *)
       (* intros. *)
@@ -852,7 +846,6 @@ Section SelectiveNet.
       admit.
     + rewrite merge_assoc. rewrite <- e.
       apply Hneighbors.
-      split; assumption.
   Abort.
 
 End SelectiveNet.
