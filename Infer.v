@@ -302,6 +302,15 @@ Section Net.
     - congruence.
   Qed.
 
+  Corollary state_updates_app_comm  {V S : Type} `{H: Net V S} :
+    forall (v : V) (neighbors1 : list (V * S)) (neighbors2 : list (V * S)),
+      updated_state v (neighbors1 ++ neighbors2) = updated_state v (neighbors2 ++ neighbors1).
+  Proof.
+    intros.
+    apply state_updates_comm.
+    apply Permutation_app_comm.
+  Qed.
+
   (* A helper definition for writing out the inductive condition with times
      erased: all invariants are specified as [S -> Prop] functions. *)
   Definition inductive_cond_untimed {V S : Type} `{H: Net V S}
@@ -707,6 +716,14 @@ Section SelectiveNet.
     apply preo.
   Qed.
 
+  Lemma merge_inv_l {V S : Type} `{H: SelectiveNet V S} :
+    forall s1 s2 s3, s1 = s3 -> Merge s1 s2 = Merge s3 s2.
+  Proof. intros. congruence. Qed.
+
+  Lemma merge_inv_r {V S : Type} `{H: SelectiveNet V S}:
+    forall s1 s2 s3, s2 = s3 -> Merge s1 s2 = Merge s1 s3.
+  Proof. intros. congruence. Qed.
+
   Definition better_or_eq {V S : Type} `{H: SelectiveNet V S} (s1 s2 : S) :=
     R s1 s2.
 
@@ -760,6 +777,24 @@ Section SelectiveNet.
     split.
     - apply fold_right_merge.
     - apply contra.
+  Qed.
+
+  Lemma fold_right_merge_comm  {V S : Type} `{H: SelectiveNet V S}:
+    forall s1 s2 states,
+      fold_right Merge s1 (s2 :: states) = fold_right Merge s2 (s1 :: states).
+  Proof.
+    induction states.
+    - simpl. apply merge_comm.
+    - simpl.
+      simpl in IHstates.
+      rewrite merge_assoc.
+      rewrite (merge_comm s2 a).
+      rewrite <- merge_assoc.
+      rewrite IHstates.
+      rewrite merge_assoc.
+      rewrite merge_assoc.
+      rewrite (merge_comm a s1).
+      reflexivity.
   Qed.
 
   Lemma fold_right_merge_idemp  {V S : Type} `{H: SelectiveNet V S}:
@@ -896,6 +931,30 @@ Section SelectiveNet.
       assumption.
   Qed.
 
+  Lemma fold_right_merge_init2 {V S : Type} `{H: SelectiveNet V S}:
+    forall s states1 states2,
+      Merge (fold_right Merge s states1) (fold_right Merge s states2)
+      = fold_right Merge s (states1 ++ states2).
+  Proof.
+    induction states1; intros.
+    - simpl.
+      replace (Merge s (fold_right Merge s states2)) with (fold_right Merge s (s :: states2)) by reflexivity.
+      rewrite fold_right_merge_idemp.
+      reflexivity.
+    - rewrite fold_right_app.
+      simpl.
+      specialize (IHstates1 (a :: states2)).
+      simpl in IHstates1.
+      rewrite merge_assoc in IHstates1.
+      rewrite (merge_comm (fold_right Merge s states1) a) in IHstates1.
+      rewrite IHstates1.
+      remember (fold_right Merge s states1) as s1.
+      destruct states2 as [| a0 states2].
+      + simpl.
+        admit.
+      + simpl.
+  Admitted.
+
   Lemma selective_inductive_cond_untimed_join {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list V) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
       length neighbors1 = length states1 ->
@@ -913,47 +972,30 @@ Section SelectiveNet.
     apply Forall2_app in Hnbrs.
     destruct Hnbrs as [Hnbrs1 Hnbrs2].
     rewrite combine_length in H5, H6.
+    2,3: rewrite combine_length.
     rewrite <- H1 in H5.
+    2: rewrite <- H1.
     rewrite <- H3 in H6.
+    3: rewrite <- H3.
     rewrite PeanoNat.Nat.min_id in H5, H6.
+    2, 3: rewrite PeanoNat.Nat.min_id; assumption.
     specialize (H5 H2 Hnbrs1).
     specialize (H6 H4 Hnbrs2).
     unfold updated_state.
     unfold transfer_routes.
     rewrite map_app.
-    rewrite fold_right_app.
-    destruct (merge_select (fold_right Merge (I v) (transfer_routes v (combine neighbors1 states1)))
-                           (fold_right Merge (I v) (transfer_routes v (combine neighbors2 states2)))).
-    - unfold updated_state in H5, H6.
-      rewrite H7 in H5.
-      unfold transfer_routes in H5.
-    simpl.
-    destruct (merge_select (F u v us) (fold_right Merge (I v) (transfer_routes v (combine neighbors states)))).
-    - unfold updated_state in H3.
-      simpl in H3.
-      simpl in H5.
-      destruct (merge_select (I v) (fold_right Merge (I v) (transfer_routes v (combine neighbors states)))).
-      + replace (Merge (I v) (fold_right Merge (I v) (transfer_routes v (combine neighbors states))))
-                      with (fold_right Merge (I v) ((I v) :: (transfer_routes v (combine neighbors states)))) in H8
-        by reflexivity.
-        rewrite fold_right_merge_idemp in H8.
-        rewrite H8 in H3.
-        apply H3.
-        split.
-        * assumption.
-        * constructor.
-      + rewrite H8.
-        rewrite merge_assoc.
-        rewrite (merge_comm (F u v us) (I v)).
-        rewrite <- merge_assoc.
-        rewrite <- H7.
-        rewrite merge_comm.
-        apply H3.
-        split.
-        * assumption.
-        * constructor.
-    - rewrite <- H7.
-      assumption.
+    fold (transfer_routes v (combine neighbors1 states1)).
+    fold (transfer_routes v (combine neighbors2 states2)).
+    destruct (merge_select (updated_state v (combine neighbors1 states1))
+                           (updated_state v (combine neighbors2 states2))).
+    - rewrite H7 in H5.
+      unfold updated_state in H5.
+      rewrite fold_right_merge_init2 in H5.
+      apply H5.
+    - rewrite H7 in H6.
+      unfold updated_state in H6.
+      rewrite fold_right_merge_init2 in H6.
+      apply H6.
   Qed.
 
   Lemma selective_inductive_cond_untimed_cover_fail {V S : Type} `{H: SelectiveNet V S}:
