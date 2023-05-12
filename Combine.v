@@ -225,3 +225,40 @@ Proof.
     clear Hlen11 Hlen12 Hlen21 Hlen22 H1' H2'.
     admit.
 Admitted.
+
+Lemma Permutation_combine_Exists :
+  forall {T1 T2 : Type} (l1 l2 : list T1) (l3 : list T2),
+    Permutation l1 l2 ->
+    exists (l4 : list T2),
+      Permutation l3 l4 ->
+      Permutation (combine l1 l3) (combine l2 l4).
+Proof.
+  intros.
+  induction H.
+  - exists nil.
+    intros.
+    apply Permutation_sym in H.
+    apply Permutation_nil in H.
+    subst.
+    constructor.
+  - destruct IHPermutation as [l4 IHP].
+    exists l4.
+    intros.
+    destruct l3; destruct l4;
+      try ((apply Permutation_nil in H0 || (apply Permutation_sym in H0; apply Permutation_nil in H0)); subst; constructor).
+    + apply Permutation_nil_cons in H0. inversion H0.
+    + apply Permutation_sym in H0. apply Permutation_nil_cons in H0. inversion H0.
+    + specialize (IHP H0).
+      simpl.
+      admit.
+  - do 2 (try destruct l3 as [| ? l3]).
+    + exists nil. intros. constructor.
+    + exists nil. intros. apply Permutation_sym, Permutation_nil_cons in H. inversion H.
+    + exists (t0 :: t :: l3).
+      intros.
+      simpl.
+      constructor.
+  - destruct IHPermutation1 as [l4' IHP1].
+    destruct IHPermutation2 as [l4'' IHP2].
+    admit.
+Admitted.
