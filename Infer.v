@@ -326,8 +326,8 @@ Section Net.
   Proof.
     intros.
     unfold inductive_cond.
-    split; intro; intros t states2 Hstateslen.
-    -
+    split; intro.
+    - intros t states2 Hstateslen.
       assert (H0' := H0).
       apply Permutation_sym in H0.
       apply (Permutation_combine_Exists neighbors2 neighbors1 states2) in H0.

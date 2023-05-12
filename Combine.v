@@ -128,6 +128,17 @@ Proof.
     split; reflexivity.
 Qed.
 
+Lemma split_map_fst_snd :
+  forall {T1 T2 : Type} (l : list (T1 * T2)),
+    split l = (map fst l, map snd l).
+Proof.
+  induction l; simpl; try reflexivity.
+  destruct a.
+  simpl.
+  rewrite IHl.
+  reflexivity.
+Qed.
+
 Lemma Permutation_split :
   forall {T1 T2 : Type} (l1 l2 : list (T1 * T2)) (l11 l12 : list T1) (l21 l22 : list T2),
     Permutation l1 l2 ->
@@ -219,12 +230,28 @@ Proof.
     { rewrite <- split_length_r. rewrite H1'. simpl. reflexivity. }
     assert (Hlen1: length l11 = length l21) by congruence.
     assert (Hlen2: length l12 = length l22) by congruence.
-    apply IHPermutation1; try assumption.
-    rewrite <- H1'.
+    (* now we should express that l' has two components *)
+    assert (exists l1' l2', split l' = (l1', l2')).
+    { exists (map fst l'). exists (map snd l'). apply split_map_fst_snd. }
+    destruct H3 as [l1' [l2' Hl']].
+    assert (Hl'c := Hl').
+    apply split_combine in Hl'c.
+    assert (Hlen1': length l' = length l1').
+    { rewrite <- split_length_l. rewrite Hl'. simpl. reflexivity. }
+    assert (Hlen2': length l' = length l2').
+    { rewrite <- split_length_r. rewrite Hl'. simpl. reflexivity. }
+    assert (Hlen': length l1' = length l2') by congruence.
+    (* and finally we can do forward reasoning through the IHs *)
+    rewrite <- Hl'c in H, H0, IHPermutation1, IHPermutation2.
+    rewrite (combine_split _ _ Hlen') in IHPermutation1.
+    rewrite (combine_split _ _ Hlen') in IHPermutation2.
+    specialize (IHPermutation1 l2' l21 l1' eq_refl l11 H2').
+    specialize (IHPermutation2 l22 l2' l12 H1' l1' eq_refl).
+    destruct IHPermutation1.
+    destruct IHPermutation2.
     subst.
-    clear Hlen11 Hlen12 Hlen21 Hlen22 H1' H2'.
-    admit.
-Admitted.
+    split; eapply perm_trans; eassumption.
+Qed.
 
 Lemma Permutation_combine_Exists :
   forall {T1 T2 : Type} (l1 l2 : list T1) (l3 : list T2),
