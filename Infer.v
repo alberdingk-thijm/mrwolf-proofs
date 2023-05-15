@@ -856,3 +856,59 @@ Section SelectiveNet.
   Qed.
 
 End SelectiveNet.
+
+Section SelectiveNetExamples.
+  Definition nbr1 := fun x => (x = 0) \/ (x = 1).
+  Definition nbr2 := fun x => (x = 2) \/ (x = 3).
+  Definition nbr3 := fun x => (x = 4) \/ (x = 5).
+  Definition nbr4 := fun x => (x = 6) \/ (x = 7).
+  Definition node := fun x => not ((x = 3) \/ (x = 5)).
+
+  Definition merge x y := min x y.
+
+  Instance twoSelectorNet : Net nat nat :=
+    {
+      Merge := merge;
+      F := fun u v s => s;
+      I := fun v => match v with
+                   | 0 => 7
+                   | 1 => 1
+                   | 2 => 3
+                   | 3 => 5
+                   | 4 => 7
+                   | _ => 16
+                  end;
+      merge_assoc := PeanoNat.Nat.min_assoc;
+      merge_comm := PeanoNat.Nat.min_comm;
+      A := fun v => match v with
+                   | 0 => (fun t => node)
+                   | 1 => (fun t => nbr1)
+                   | 2 => (fun t => nbr2)
+                   | 3 => (fun t => nbr3)
+                   | 4 => (fun t => nbr4)
+                   | _ => (fun t s => True)
+                           end;
+    }.
+
+  Example twoSelector12 :
+    forall s1 s2, nbr1 s1 /\ nbr2 s2 -> node (Merge s1 s2).
+  Proof.
+    intros.
+    simpl.
+    destruct H.
+    unfold node, nbr1, nbr2 in *.
+    intro contra.
+    destruct H; destruct H0; destruct contra; subst; try inversion H1.
+  Qed.
+
+  Example twoSelector34 :
+    forall s3 s4, nbr3 s3 /\ nbr4 s4 -> node (Merge s3 s4).
+  Proof.
+    intros.
+    simpl.
+    unfold node, nbr3, nbr4 in *.
+    intro contra.
+    destruct H.
+    destruct H; destruct H0; destruct contra; subst; try inversion H1.
+  Abort.
+End SelectiveNetExamples.
