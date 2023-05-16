@@ -858,57 +858,152 @@ Section SelectiveNet.
 End SelectiveNet.
 
 Section SelectiveNetExamples.
-  Definition nbr1 := fun x => (x = 0) \/ (x = 1).
-  Definition nbr2 := fun x => (x = 2) \/ (x = 3).
-  Definition nbr3 := fun x => (x = 4) \/ (x = 5).
-  Definition nbr4 := fun x => (x = 6) \/ (x = 7).
-  Definition node := fun x => not ((x = 3) \/ (x = 5)).
-
-  Definition merge x y := min x y.
-
-  Instance twoSelectorNet : Net nat nat :=
-    {
-      Merge := merge;
-      F := fun u v s => s;
-      I := fun v => match v with
-                   | 0 => 7
-                   | 1 => 1
-                   | 2 => 3
-                   | 3 => 5
-                   | 4 => 7
-                   | _ => 16
-                  end;
-      merge_assoc := PeanoNat.Nat.min_assoc;
-      merge_comm := PeanoNat.Nat.min_comm;
-      A := fun v => match v with
-                   | 0 => (fun t => node)
-                   | 1 => (fun t => nbr1)
-                   | 2 => (fun t => nbr2)
-                   | 3 => (fun t => nbr3)
-                   | 4 => (fun t => nbr4)
-                   | _ => (fun t s => True)
-                           end;
-    }.
-
-  Example twoSelector12 :
-    forall s1 s2, nbr1 s1 /\ nbr2 s2 -> node (Merge s1 s2).
+  Example inconsistend_tetrad1  {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φ4 φv : φ S),
+      (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
+      (forall (s3 s4 : S), φ3(s3) -> φ4(s4) -> φv(Merge s3 s4)) ->
+      (exists (s1 s3 : S), φ1(s1) /\ φ3(s3) /\ not (φv(Merge s1 s3))) ->
+      not (exists (s2 s4 : S), φ2(s2) /\ φ4(s4) /\ not (φv(Merge s2 s4))).
   Proof.
     intros.
-    simpl.
-    destruct H.
-    unfold node, nbr1, nbr2 in *.
     intro contra.
-    destruct H; destruct H0; destruct contra; subst; try inversion H1.
+    destruct H3 as [s1 [s3 [Hs1 [Hs3 Hs13]]]].
+    destruct contra as [s2 [s4 [Hs2 [Hs4 Hs24]]]].
+    destruct (merge_select s2 s4); destruct (merge_select s1 s3);
+      rewrite <- H4 in Hs13; rewrite <- H3 in Hs24;
+      specialize (H1 s1 s2 Hs1 Hs2);
+      specialize (H2 s3 s4 Hs3 Hs4).
+    - destruct (merge_select s1 s2).
+      + apply Hs13.
+        rewrite <- H5 in H1.
+        apply H1.
+      + apply Hs24.
+        rewrite H5.
+        apply H1.
+    - destruct (merge_select s2 s3).
+      + assert (Hs12: s2 = Merge s1 s2).
+        { rewrite H5.
+          rewrite merge_assoc.
+          rewrite (merge_comm s1 s2).
+          rewrite <- merge_assoc.
+          rewrite <- H4.
+          reflexivity.
+        }
+        rewrite <- Hs12 in H1.
+        apply Hs24.
+        apply H1.
+      + assert (Hs34: s3 = Merge s3 s4).
+        {
+          rewrite H5.
+          rewrite <- merge_assoc.
+          rewrite (merge_comm s3 s4).
+          rewrite merge_assoc.
+          rewrite <- H3.
+          reflexivity.
+        }
+        apply Hs13.
+        rewrite Hs34.
+        apply H2.
+    - destruct (merge_select s1 s4).
+      + assert (Hs12: s1 = Merge s1 s2).
+        {
+          rewrite H5.
+          rewrite <- merge_assoc.
+          rewrite (merge_comm s4 s2).
+          rewrite <- H3.
+          reflexivity.
+        }
+        rewrite <- Hs12 in H1.
+        apply Hs13.
+        apply H1.
+      + assert (Hs34: s4 = Merge s3 s4).
+        {
+          rewrite H5.
+          rewrite merge_assoc.
+          rewrite (merge_comm s3 s1).
+          rewrite <- H4.
+          reflexivity.
+        }
+        rewrite <- Hs34 in H2.
+        apply Hs24.
+        apply H2.
+    - destruct (merge_select s3 s4).
+      + rewrite <- H5 in H2.
+        apply Hs13.
+        apply H2.
+      + apply Hs24.
+        rewrite H5.
+        apply H2.
   Qed.
 
-  Example twoSelector34 :
-    forall s3 s4, nbr3 s3 /\ nbr4 s4 -> node (Merge s3 s4).
+  Example inconsistend_tetrad2  {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φ4 φv : φ S),
+      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ not (φv(Merge s1 s2))) ->
+      (exists (s3 s4 : S), φ3(s3) /\ φ4(s4) /\ not (φv(Merge s3 s4))) ->
+      (forall (s1 s3 : S), φ1(s1) -> φ3(s3) -> φv(Merge s1 s3)) ->
+      not (forall (s2 s4 : S), φ2(s2) -> φ4(s4) -> (φv(Merge s2 s4))).
   Proof.
     intros.
-    simpl.
-    unfold node, nbr3, nbr4 in *.
     intro contra.
-    destruct H.
-    destruct H; destruct H0; destruct contra; subst; try inversion H1.
-  Abort.
+    destruct H1 as [s1 [s2 [Hs1 [Hs2 Hs12]]]].
+    destruct H2 as [s3 [s4 [Hs3 [Hs4 Hs34]]]].
+    destruct (merge_select s2 s4); destruct (merge_select s1 s3);
+      specialize (H3 s1 s3 Hs1 Hs3);
+      specialize (contra s2 s4 Hs2 Hs4);
+      rewrite <- H2 in H3;
+      rewrite <- H1 in contra.
+    - apply Hs12.
+      destruct (merge_select s1 s2); rewrite <- H4; assumption.
+    - destruct (merge_select s2 s3).
+      + assert (H12 : s2 = Merge s1 s2).
+        {
+          rewrite H4.
+          rewrite merge_assoc.
+          rewrite (merge_comm s1 s2).
+          rewrite <- merge_assoc.
+          rewrite <- H2.
+          reflexivity.
+        }
+        apply Hs12.
+        rewrite <- H12.
+        apply contra.
+      + assert (H34 : s3 = Merge s3 s4).
+        {
+          rewrite H4.
+          rewrite <- merge_assoc.
+          rewrite (merge_comm s3 s4).
+          rewrite merge_assoc.
+          rewrite <- H1.
+          reflexivity.
+        }
+        rewrite <- H34 in Hs34.
+        apply Hs34.
+        apply H3.
+    - destruct (merge_select s1 s4).
+      + assert (H12 : s1 = Merge s1 s2).
+        {
+          rewrite H4.
+          rewrite <- merge_assoc.
+          rewrite (merge_comm s4 s2).
+          rewrite <- H1.
+          reflexivity.
+        }
+        rewrite <- H12 in Hs12.
+        apply Hs12.
+        apply H3.
+      + assert (H34 : s4 = Merge s3 s4).
+        {
+          rewrite H4.
+          rewrite merge_assoc.
+          rewrite (merge_comm s3 s1).
+          rewrite <- H2.
+          reflexivity.
+        }
+        rewrite <- H34 in Hs34.
+        apply Hs34.
+        apply contra.
+    - apply Hs34.
+      destruct (merge_select s3 s4); rewrite <- H4; assumption.
+  Qed.
+
 End SelectiveNetExamples.
