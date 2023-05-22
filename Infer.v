@@ -855,6 +855,29 @@ Section SelectiveNet.
     - apply Hneighbors2; symmetry; assumption.
   Qed.
 
+  Lemma selective_neighbor_pairs_join_selective_neighbors_fail {V S : Type} `{H: SelectiveNet V S}:
+    forall (v : V) (neighbors1 neighbors2 : list V),
+      ~ inductive_cond v neighbors1 ->
+      ~ inductive_cond v neighbors2 ->
+      ~ inductive_cond v (neighbors1 ++ neighbors2).
+  Proof.
+    intros v neighbors1 neighbors2 Hneighbors1 Hneighbors2.
+    unfold inductive_cond in *.
+    intro contra.
+    repeat (apply not_all_ex_not in Hneighbors1; destruct Hneighbors1 as [? Hneighbors1]).
+    repeat (apply not_all_ex_not in Hneighbors2; destruct Hneighbors2 as [? Hneighbors2]).
+    specialize (contra x (x0 ++ x5)).
+    do 2 rewrite app_length in contra.
+    rewrite x6 in contra.
+    rewrite x1 in contra.
+    specialize (contra eq_refl).
+    (* apply (selective_inductive_cond_untimed_join_fail v (A v x) *)
+    (*          neighbors1 neighbors2 x0 x5 *)
+    (*          (map (fun m => A m x) neighbors1) *)
+    (*         (map (fun m => A m x4) neighbors2)) in contra. *)
+    (* prove that states decomposes into [states1 ++ states2] *)
+  Abort.
+
 End SelectiveNet.
 
 Section SelectiveNetExamples.
