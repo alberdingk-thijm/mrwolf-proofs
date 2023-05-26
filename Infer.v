@@ -7,7 +7,7 @@ Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Lia.
 Require Import Coq.Classes.RelationClasses.
 Require Import Classical.
-Require Import Combine.
+From MrWolf Require Import Combine.
 
 Lemma Forall_forall2 :
   forall { T1 T2 : Type } (R : T1 -> T2 -> Prop) (l1 : list T1) (l2 : list T2),
@@ -563,17 +563,44 @@ Section SelectiveNet.
       merge_order : forall s1 s2, s1 = Merge s1 s2 <-> R s1 s2
     }.
 
-  (* Instance NatNet : SelectiveNet nat nat := *)
-  (*   { *)
-  (*     Merge := PeanoNat.Nat.min; *)
-  (*     F := fun u v s => 1 + s; *)
-  (*     I := fun v => if (v =? 0) then 0 else 16; *)
-  (*     merge_assoc := PeanoNat.Nat.min_assoc; *)
-  (*     merge_comm := PeanoNat.Nat.min_comm; *)
-  (*     A := fun v => if (v =? 0) then (fun t s => s = 0) else *)
-  (*                  (fun t s => if (t <? 1) then True else s = 1); *)
-  (*     merge_order := PeanoNat.Nat.min_l; *)
-  (*   }. *)
+  Instance NatNet : Net nat nat :=
+    {
+      Merge := PeanoNat.Nat.min;
+      F := fun u v s => 1 + s;
+      I := fun v => if (v =? 0) then 0 else 16;
+      merge_assoc := PeanoNat.Nat.min_assoc;
+      merge_comm := PeanoNat.Nat.min_comm;
+      A := fun v => if (v =? 0) then (fun t s => s = 0) else
+                   (fun t s => if (t <? 1) then True else s = 1);
+      (* merge_order := PeanoNat.Nat.min_l; *)
+    }.
+
+  Lemma min_select :
+    forall m n, m = min m n \/ n = min m n.
+  Proof. lia. Qed.
+
+  Lemma min_order :
+    forall m n, m = min m n <-> m <= n.
+  Proof. lia. Qed.
+
+  Instance SelectiveNatNet : SelectiveNet nat nat :=
+    {
+      merge_select := min_select;
+      merge_order := min_order;
+    }.
+
+  Example ind_vc2 :
+    inductive_cond 2 (0 :: 1 :: nil).
+  Proof.
+    unfold inductive_cond, inductive_cond_untimed, updated_state.
+    intros.
+    do 3 (destruct states as [| ? states]; try solve[inversion H]).
+    simpl.
+    inversion H1.
+    simpl in H5.
+    subst.
+    lia.
+  Qed.
 
   Lemma merge_idempotent {V S : Type} `{H: SelectiveNet V S} :
     forall s, s = Merge s s.
@@ -866,17 +893,36 @@ Section SelectiveNet.
     intro contra.
     repeat (apply not_all_ex_not in Hneighbors1; destruct Hneighbors1 as [? Hneighbors1]).
     repeat (apply not_all_ex_not in Hneighbors2; destruct Hneighbors2 as [? Hneighbors2]).
-    specialize (contra x (x0 ++ x5)).
-    do 2 rewrite app_length in contra.
-    rewrite x6 in contra.
-    rewrite x1 in contra.
-    specialize (contra eq_refl).
-    (* apply (selective_inductive_cond_untimed_join_fail v (A v x) *)
-    (*          neighbors1 neighbors2 x0 x5 *)
-    (*          (map (fun m => A m x) neighbors1) *)
-    (*         (map (fun m => A m x4) neighbors2)) in contra. *)
-    (* prove that states decomposes into [states1 ++ states2] *)
-  Abort.
+    destruct (PeanoNat.Nat.eq_decidable x x4).
+    - (* The case where [x = x4] is easy to show.
+         Since both inductive conditions fail at a particular time [x],
+         there will be no way of satisfying the condition at that particular time,
+         by application of the inductive_cond_untimed lemma.
+       *)
+      specialize (contra x (x0 ++ x5)).
+      do 2 rewrite app_length in contra.
+      rewrite x6 in contra.
+      rewrite x1 in contra.
+      specialize (contra eq_refl).
+      rewrite map_app in contra.
+      rewrite combine_app in contra; try (symmetry; assumption).
+      apply (selective_inductive_cond_untimed_join_fail v (A v (1 + x))
+              neighbors1 neighbors2 x0 x5
+              (map (fun m => A m x) neighbors1)
+              (map (fun m => A m x) neighbors2)) in contra;
+        try (symmetry; assumption) || assumption || (rewrite map_length; reflexivity).
+      + intro contra1.
+        apply Hneighbors1.
+        apply contra1; assumption.
+      + intro contra2.
+        rewrite <- H1 in *.
+        apply Hneighbors2.
+        apply contra2; assumption.
+    - (* Unfortunately, we have no such luck when [x <> x4].
+         In this scenario, it could be the case that while one group fails at [x],
+         the other group passes at [x], and likewise at [x4].
+         This leaves us with no case where the check always fails at all times. *)
+    Abort.
 
 End SelectiveNet.
 
