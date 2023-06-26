@@ -860,7 +860,7 @@ Section SelectiveNet.
       apply H6. apply contra.
   Qed.
 
-  Lemma selective_neighbor_pairs_join_selective_neighbors {V S : Type} `{H: SelectiveNet V S}:
+  Lemma selective_neighbor_pairs_join {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       inductive_cond v neighbors1 ->
       inductive_cond v neighbors2 ->
@@ -922,6 +922,9 @@ Section SelectiveNet.
          In this scenario, it could be the case that while one group fails at [x],
          the other group passes at [x], and likewise at [x4].
          This leaves us with no case where the check always fails at all times. *)
+      (* Furthermore, we might need some additional condition to show that
+         if the neighbors overlap that we can still conclude something
+         about all cases? *)
     Abort.
 
 End SelectiveNet.
