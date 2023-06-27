@@ -628,14 +628,28 @@ Section SelectiveNet.
   Infix "≺" := better (at level 20).
 
   Definition better_inv {V S : Type} `{H: SelectiveNet V S} (φ1 φ2 : φ S) :=
-    forall s1 s2, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
+    forall s2, exists s1, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
+
+  Corollary better_inv_trans  {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 : φ S),
+      better_inv φ1 φ2 ->
+      better_inv φ2 φ3 ->
+      better_inv φ1 φ3.
+  Proof.
+    unfold better_inv in *.
+    intros.
+    eexists.
+    intros.
+    apply preo.
+  Qed.
 
   Example better_inv1 {V S : Type} `{H: SelectiveNet V S}:
     forall s1 s2, s1 ⪯ s2 -> better_inv (fun s => s = s1) (fun s => s = s2).
   Proof.
     intros s1 s2 Hle.
     unfold better_inv.
-    intros s0 s3 Hle1 Hle2.
+    intros s0.
+    exists s0. intros Hle1 Hle2.
     congruence.
   Qed.
 
@@ -860,6 +874,17 @@ Section SelectiveNet.
       apply H6. apply contra.
   Qed.
 
+  Lemma selective_inductive_cond_untimed_join_idemp {V S : Type} `{H: SelectiveNet V S}:
+    forall (u1 u2 v : V) (state1 state2 : S) (invv invu : φ S) (neighbors : list V) (states : list S) (invs : list (φ S)),
+      length neighbors = length states ->
+      length neighbors = length invs ->
+      inductive_cond_untimed v invv (combine (u1 :: u2 :: neighbors) (state1 :: state2 :: states)) (invu :: invu :: invs) ->
+      inductive_cond_untimed v invv (combine (u1 :: neighbors) (state1 :: states)) (invu :: invs).
+  Proof.
+    intros.
+  Abort.
+
+
   Lemma selective_neighbor_pairs_join {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       inductive_cond v neighbors1 ->
@@ -882,6 +907,28 @@ Section SelectiveNet.
     - apply Hneighbors2; symmetry; assumption.
   Qed.
 
+  Lemma selective_fail_overlap_fail_if_equal  {V S : Type} `{H: SelectiveNet V S}:
+    forall (u v : V) (invu invv : φ S) (neighbors1 neighbors2 : list V)
+      (stateu state1 state2 : S) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
+      length neighbors1 = length states1 ->
+      length neighbors1 = length invs1 ->
+      length neighbors2 = length states2 ->
+      length neighbors2 = length invs2 ->
+      state1 <> state2 ->
+      stateu = state1 \/ stateu = state2 ->
+      ~ inductive_cond_untimed v invv (combine (u :: neighbors1) (state1 :: states1)) (invu :: invs1) ->
+      ~ inductive_cond_untimed v invv (combine (u :: neighbors2) (state2 :: states2)) (invu :: invs2) ->
+      ~ inductive_cond_untimed v invv (combine (u :: (neighbors1 ++ neighbors2)) (stateu :: (states1 ++ states2))) (invu :: (invs1 ++ invs2)).
+  Proof.
+    intros u v invu invv neighbors1 neighbors2 stateu state1 state2 states1 states2 invs1 invs2.
+    intros Hlenstate1 Hleninvs1 Hlenstates2 Hleninvs2 Hstateneq Hstateu Hneighbors1 Hneighbors2.
+    repeat (apply imply_to_and in Hneighbors1; destruct Hneighbors1 as [? Hneighbors1]).
+    repeat (apply imply_to_and in Hneighbors2; destruct Hneighbors2 as [? Hneighbors2]).
+    destruct Hstateu; subst; intro contra.
+    -
+      unfold inductive_cond_untimed in *.
+  Abort.
+
   Lemma selective_neighbor_pairs_join_selective_neighbors_fail {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       ~ inductive_cond v neighbors1 ->
@@ -893,23 +940,24 @@ Section SelectiveNet.
     intro contra.
     repeat (apply not_all_ex_not in Hneighbors1; destruct Hneighbors1 as [? Hneighbors1]).
     repeat (apply not_all_ex_not in Hneighbors2; destruct Hneighbors2 as [? Hneighbors2]).
-    destruct (PeanoNat.Nat.eq_decidable x x4).
-    - (* The case where [x = x4] is easy to show.
+    rename x into t1, x4 into t2, x0 into states1, x5 into states2.
+    destruct (PeanoNat.Nat.eq_decidable t1 t2).
+    - (* The case where [t1 = t2] is easy to show.
          Since both inductive conditions fail at a particular time [x],
          there will be no way of satisfying the condition at that particular time,
          by application of the inductive_cond_untimed lemma.
        *)
-      specialize (contra x (x0 ++ x5)).
+      specialize (contra t1 (states1 ++ states2)).
       do 2 rewrite app_length in contra.
       rewrite x6 in contra.
       rewrite x1 in contra.
       specialize (contra eq_refl).
       rewrite map_app in contra.
       rewrite combine_app in contra; try (symmetry; assumption).
-      apply (selective_inductive_cond_untimed_join_fail v (A v (1 + x))
-              neighbors1 neighbors2 x0 x5
-              (map (fun m => A m x) neighbors1)
-              (map (fun m => A m x) neighbors2)) in contra;
+      apply (selective_inductive_cond_untimed_join_fail v (A v (1 + t1))
+              neighbors1 neighbors2 states1 states2
+              (map (fun m => A m t1) neighbors1)
+              (map (fun m => A m t1) neighbors2)) in contra;
         try (symmetry; assumption) || assumption || (rewrite map_length; reflexivity).
       + intro contra1.
         apply Hneighbors1.
@@ -918,18 +966,62 @@ Section SelectiveNet.
         rewrite <- H1 in *.
         apply Hneighbors2.
         apply contra2; assumption.
-    - (* Unfortunately, we have no such luck when [x <> x4].
-         In this scenario, it could be the case that while one group fails at [x],
-         the other group passes at [x], and likewise at [x4].
+    - (* Unfortunately, we have no such luck when [t1 <> t2].
+         In this scenario, it could be the case that while one group fails at [t1],
+         the other group passes at [t1] and is preferred,
+         and likewise at [t2] the other group passes and is preferred.
          This leaves us with no case where the check always fails at all times. *)
       (* Furthermore, we might need some additional condition to show that
          if the neighbors overlap that we can still conclude something
          about all cases? *)
+      (* Suppose that [t1] has a case where the chosen route is from [neighbors1]... *)
+      destruct (merge_select (updated_state v (combine neighbors1 states1))
+                             (updated_state v (combine neighbors2 states2))) as [Hselect1 | Hselect2].
+      + specialize (contra t1 (states1 ++ states2)).
+        unfold inductive_cond_untimed in contra.
+        rewrite combine_length in contra.
+        rewrite map_length in contra.
+        repeat rewrite app_length in contra. rewrite x1, x6 in contra.
+        rewrite PeanoNat.Nat.min_id in contra.
+        specialize (contra eq_refl eq_refl).
+        unfold updated_state, transfer_routes in contra.
+        rewrite map_app in contra.
+        unfold updated_state in Hselect1. rewrite fold_right_merge_init2 in Hselect1.
     Abort.
 
 End SelectiveNet.
 
 Section SelectiveNetExamples.
+  Example pass_overrules_fail {V S : Type} `{H: SelectiveNet V S}:
+    forall (φ1 φ2 φv : φ S),
+      better_inv φ1 φ2 ->
+      (forall (s1 : S), φ1(s1) -> φv(s1)) ->
+      (exists (s2 : S), φ2(s2) /\ not (φv(s2))) ->
+      forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2).
+  Proof.
+    intros.
+    (* even though there exists an [s2] such that the invariant fails,
+       we know that there exists a better [s1] such that [s1 = Merge s1 s2]. *)
+    unfold better_inv in H1.
+    destruct H3 as [s2' [? ?]].
+    destruct (merge_select s1 s2).
+    - rewrite <- H7. apply H2. assumption.
+    - unfold better_or_eq in H1.
+  Abort.
+
+  Example inconsistent_overlap {V S : Type} `{H: SelectiveNet V S}:
+    forall (φ1 φ2 φ3 φv : φ S),
+      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ not (φv(Merge s1 s2))) ->
+      (exists (s2' s3 : S), φ2(s2') /\ φ3(s3) /\ not (φv(Merge s2' s3))) ->
+      not (exists (s1' s2'' s3' : S), φ1(s1') /\ φ2(s2'') /\ φ3(s3') /\ not (φv(Merge s1' (Merge s2'' s3')))).
+  Proof.
+    intros.
+    intro contra.
+    destruct H1 as [s1 [s2 [Hs1 [Hs2 Hs12]]]].
+    destruct H2 as [s2' [s3 [Hs2' [Hs3 Hs23]]]].
+    destruct contra as [s1' [s2'' [s3' [Hs1' [Hs2'' [Hs3' Hs123]]]]]].
+    destruct (merge_select )
+
   Example inconsistend_tetrad1  {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
       (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
