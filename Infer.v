@@ -1016,7 +1016,43 @@ Section SelectiveNet.
 End SelectiveNet.
 
 Section SelectiveNetExamples.
-  Example inconsistend_tetrad1  {V S : Type} `{H: SelectiveNet V S} :
+  Example better_inv_pass {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φv : φ S),
+      better_inv φ1 φ2 ->
+      (forall (s1 : S), φ1(s1) -> φv(s1)) ->
+      (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)).
+  Proof.
+    intros.
+    unfold better_inv in H1.
+    apply H2.
+    apply H1; assumption.
+  Qed.
+
+  Example better_inv_fail {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φv : φ S),
+      better_inv φ1 φ2 ->
+      (exists (s1 : S), φ1(s1) /\ ~ (φv(s1))) ->
+      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ ~ (φv(Merge s1 s2))).
+  Proof.
+    intros.
+    unfold better_inv in H1.
+    destruct H2 as [s1 [Hs1 Hv1]].
+    unfold φ in *.
+    (* if [φ2] never returns true for any input,
+       then we should be able to derive a contradiction? *)
+    destruct (classic (exists (s2 : S), φ2 s2)).
+    - destruct H2 as [s2 H2].
+      exists s1.
+      exists s2.
+      repeat split; try assumption.
+      intro contra.
+      apply Hv1.
+      specialize (H1 s1 s2 Hs1 H2).
+      admit.
+    - admit.
+  Admitted.
+
+  Example inconsistend_tetrad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
       (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
       (forall (s3 s4 : S), φ3(s3) -> φ4(s4) -> φv(Merge s3 s4)) ->
