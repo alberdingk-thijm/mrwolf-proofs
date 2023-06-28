@@ -1,3 +1,8 @@
+# generated makefiles
+CoqMakefile
+CoqMakefile.conf
+
+# various coq output files
 .*.aux
 .*.d
 *.a
