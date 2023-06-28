@@ -328,21 +328,22 @@ Section Net.
     unfold inductive_cond.
     split; intro.
     - intros t states2 Hstateslen.
-      assert (H0' := H0).
-      apply Permutation_sym in H0.
-      apply (Permutation_combine_Exists neighbors2 neighbors1 states2) in H0.
-      destruct H0 as [states1 Hstates].
-      eapply inductive_cond_untimed_comm.
-      apply Hstates.
-      apply Permutation_sym.
-      4: apply H1.
-      2: apply Permutation_map; apply Permutation_sym; assumption.
-      (* We need to prove that, if the inductive condition holds for neighbors [x :: l],
-         then it will hold for neighbors [x :: l'] when l' is a permutation of l.
-         The inductive hypothesis isn't useful here, since we can't use l or l' to understand
-         the result for [x :: l] and [x :: l'].
-         Instead, we need to be able to claim that we have two state permutations such that
-         [Permutation (combine l states) (combine l' states')], so that the invariants all align. *)
+      assert (Hstates1: exists (states1 : list S),
+                 Permutation states1 states2 /\
+                 Permutation (combine neighbors1 states1) (combine neighbors2 states2)).
+      { admit. }
+      destruct Hstates1 as [states1 [Hstates1 Hcombine]].
+      apply (inductive_cond_untimed_comm v (A v (1 + t)) (combine neighbors1 states1)
+                (combine neighbors2 states2)
+             (map (fun m => A m t) neighbors1) (map (fun m => A m t) neighbors2)).
+      apply Hcombine.
+      apply Permutation_map.
+      apply H0.
+      2: apply H1; apply Permutation_length in H0, Hstates1; rewrite <- H0 in Hstateslen; congruence.
+      apply (Permutation_map (fun m => A m t)) in H0.
+      admit.
+    - intros t states1 Hstateslen.
+      admit.
   Abort.
 End Net.
 
@@ -624,33 +625,56 @@ Section SelectiveNet.
   Definition better {V S : Type} `{H: SelectiveNet V S} (s1 s2 : S) :=
     R s1 s2 /\ s1 <> s2.
 
-  Infix "⪯" := better_or_eq (at level 20).
-  Infix "≺" := better (at level 20).
+  Infix "⪯" := better_or_eq (at level 70).
+  Infix "≺" := better (at level 70).
 
   Definition better_inv {V S : Type} `{H: SelectiveNet V S} (φ1 φ2 : φ S) :=
-    forall s2, exists s1, φ1(s1) -> φ2(s2) -> s1 ⪯ s2.
+    forall s1 s2, φ1(s1) -> φ2(s2) -> φ1(Merge s1 s2).
 
-  Corollary better_inv_trans  {V S : Type} `{H: SelectiveNet V S} :
-    forall (φ1 φ2 φ3 : φ S),
-      better_inv φ1 φ2 ->
-      better_inv φ2 φ3 ->
-      better_inv φ1 φ3.
+  Infix "⊑" := better_inv (at level 60).
+
+  Corollary better_inv_refl {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ' : φ S), φ' ⊑ φ'.
   Proof.
-    unfold better_inv in *.
+    unfold better_inv.
     intros.
-    eexists.
-    intros.
-    apply preo.
+    destruct (merge_select s1 s2); congruence.
   Qed.
 
-  Example better_inv1 {V S : Type} `{H: SelectiveNet V S}:
-    forall s1 s2, s1 ⪯ s2 -> better_inv (fun s => s = s1) (fun s => s = s2).
+  Corollary better_inv_order {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 : φ S),
+      φ1 ⊑ φ2 ->
+      (forall (s1 s2 : S), φ1 s1 -> φ2 s2 -> s1 ⪯ s2 \/ φ1(s2)).
   Proof.
-    intros s1 s2 Hle.
     unfold better_inv.
-    intros s0.
-    exists s0. intros Hle1 Hle2.
-    congruence.
+    intros.
+    destruct (merge_select s1 s2).
+    - rewrite merge_order in H4.
+      left. assumption.
+    - right. rewrite H4. apply H1; assumption.
+  Qed.
+
+  Corollary better_inv_trans {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 : φ S), φ1 ⊑ φ2 -> φ2 ⊑ φ3 -> φ1 ⊑ φ3.
+  Proof.
+    intros φ1 φ2 φ3 H12 H23 s1 s3 H1 H3.
+    remember (better_inv_order φ1 φ2 H12) as Horder12.
+    remember (better_inv_order φ2 φ3 H23) as Horder23.
+
+    (* want to show that merging [s1] and [s3] produces a result satisfying [φ1];
+       we know that any in-between route [s2] that satisfies [φ2] will be better
+       than [s3], and [s1] will be better than that route [s2].
+     *)
+  Abort.
+
+  Example better_inv1 {V S : Type} `{H: SelectiveNet V S}:
+    forall (s1 s2 : S), s1 ⪯ s2 -> (fun s => s = s1) ⊑ (fun s => s = s2).
+  Proof.
+    unfold better_inv, better_or_eq.
+    intros.
+    subst.
+    symmetry. apply merge_order.
+    assumption.
   Qed.
 
   Lemma fold_right_merge_In {V S : Type} `{H: SelectiveNet V S}:
@@ -992,36 +1016,6 @@ Section SelectiveNet.
 End SelectiveNet.
 
 Section SelectiveNetExamples.
-  Example pass_overrules_fail {V S : Type} `{H: SelectiveNet V S}:
-    forall (φ1 φ2 φv : φ S),
-      better_inv φ1 φ2 ->
-      (forall (s1 : S), φ1(s1) -> φv(s1)) ->
-      (exists (s2 : S), φ2(s2) /\ not (φv(s2))) ->
-      forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2).
-  Proof.
-    intros.
-    (* even though there exists an [s2] such that the invariant fails,
-       we know that there exists a better [s1] such that [s1 = Merge s1 s2]. *)
-    unfold better_inv in H1.
-    destruct H3 as [s2' [? ?]].
-    destruct (merge_select s1 s2).
-    - rewrite <- H7. apply H2. assumption.
-    - unfold better_or_eq in H1.
-  Abort.
-
-  Example inconsistent_overlap {V S : Type} `{H: SelectiveNet V S}:
-    forall (φ1 φ2 φ3 φv : φ S),
-      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ not (φv(Merge s1 s2))) ->
-      (exists (s2' s3 : S), φ2(s2') /\ φ3(s3) /\ not (φv(Merge s2' s3))) ->
-      not (exists (s1' s2'' s3' : S), φ1(s1') /\ φ2(s2'') /\ φ3(s3') /\ not (φv(Merge s1' (Merge s2'' s3')))).
-  Proof.
-    intros.
-    intro contra.
-    destruct H1 as [s1 [s2 [Hs1 [Hs2 Hs12]]]].
-    destruct H2 as [s2' [s3 [Hs2' [Hs3 Hs23]]]].
-    destruct contra as [s1' [s2'' [s3' [Hs1' [Hs2'' [Hs3' Hs123]]]]]].
-    destruct (merge_select )
-
   Example inconsistend_tetrad1  {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
       (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
