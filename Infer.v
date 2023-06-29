@@ -1040,17 +1040,47 @@ Section SelectiveNetExamples.
     unfold φ in *.
     (* if [φ2] never returns true for any input,
        then we should be able to derive a contradiction? *)
-    destruct (classic (exists (s2 : S), φ2 s2)).
-    - destruct H2 as [s2 H2].
-      exists s1.
-      exists s2.
-      repeat split; try assumption.
-      intro contra.
-      apply Hv1.
-      specialize (H1 s1 s2 Hs1 H2).
-      admit.
+    destruct (classic (forall (s2 : S), ~ φ2 s2)).
     - admit.
-  Admitted.
+    - apply not_all_not_ex in H2.
+      destruct H2 as [s2 H2].
+      (* the problem is that we know that there is a particular [s1]
+         such that [~ φv s1], but we don't know if [Merge s1 s2 = s1]. *)
+      destruct (merge_select s1 s2).
+      + exists s1. exists s2.
+        repeat split; try assumption.
+        intro contra.
+        apply Hv1.
+        rewrite H3.
+        apply contra.
+      + (* We're now stuck. Unless [s2 = s1], we cannot use the fact
+           that [s1] failed to know that, when we chose [s2] over [s1],
+           the merge also failed. *)
+        Abort.
+
+  Example triad1 {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φv : φ S),
+      (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
+      (exists (s1 s3 : S), φ1(s1) /\ φ3(s3) /\ not (φv(Merge s1 s3))) ->
+      (exists (s2 s3 : S), φ2(s2) /\ φ3(s3) /\ not (φv(Merge s2 s3))) ->
+      (exists (s1 s2 s3 : S), φ1(s1) /\ φ2(s2) /\ φ3(s3) /\ not (φv(Merge (Merge s1 s2) s3))).
+  Proof.
+    intros.
+    destruct H2 as [s1 [s3 [H21 [H23 H213]]]].
+    destruct H3 as [s2 [s3' [H32 [H33' H323']]]].
+    exists s1. exists s2.
+    destruct (merge_select s1 s2).
+    - exists s3. repeat split; try assumption.
+      intro contra.
+      apply H213.
+      rewrite H2.
+      apply contra.
+    - exists s3'. repeat split; try assumption.
+      intro contra.
+      apply H323'.
+      rewrite H2.
+      apply contra.
+  Qed.
 
   Example inconsistend_tetrad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
