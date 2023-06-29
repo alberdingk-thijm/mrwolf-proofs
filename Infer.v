@@ -1082,6 +1082,17 @@ Section SelectiveNetExamples.
       apply contra.
   Qed.
 
+  Example triad2 {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φv : φ S),
+      (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
+      (forall (s1 s3 : S), φ1(s1) -> φ3(s3) -> φv(Merge s1 s3)) ->
+      (forall (s1 s2 s3 : S), φ1(s1) -> φ2(s2) -> φ3(s3) -> φv(Merge (Merge s1 s2) s3)).
+  Proof.
+    intros.
+    destruct (merge_select s2 s3).
+    - apply H2; assumption.
+    - apply H1. assumption.
+
   Example inconsistend_tetrad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
       (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
