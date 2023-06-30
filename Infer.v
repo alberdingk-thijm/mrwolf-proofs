@@ -1060,38 +1060,39 @@ Section SelectiveNetExamples.
 
   Example triad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φv : φ S),
-      (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
       (exists (s1 s3 : S), φ1(s1) /\ φ3(s3) /\ not (φv(Merge s1 s3))) ->
       (exists (s2 s3 : S), φ2(s2) /\ φ3(s3) /\ not (φv(Merge s2 s3))) ->
       (exists (s1 s2 s3 : S), φ1(s1) /\ φ2(s2) /\ φ3(s3) /\ not (φv(Merge (Merge s1 s2) s3))).
   Proof.
     intros.
-    destruct H2 as [s1 [s3 [H21 [H23 H213]]]].
-    destruct H3 as [s2 [s3' [H32 [H33' H323']]]].
+    destruct H1 as [s1 [s3 [H11 [H13 H113]]]].
+    destruct H2 as [s2 [s3' [H22 [H23' H223']]]].
     exists s1. exists s2.
     destruct (merge_select s1 s2).
     - exists s3. repeat split; try assumption.
       intro contra.
-      apply H213.
-      rewrite H2.
+      apply H113.
+      rewrite H1.
       apply contra.
     - exists s3'. repeat split; try assumption.
       intro contra.
-      apply H323'.
-      rewrite H2.
+      apply H223'.
+      rewrite H1.
       apply contra.
   Qed.
 
   Example triad2 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φv : φ S),
       (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)) ->
-      (forall (s1 s3 : S), φ1(s1) -> φ3(s3) -> φv(Merge s1 s3)) ->
+      (forall (s2 s3 : S), φ2(s2) -> φ3(s3) -> φv(Merge s2 s3)) ->
       (forall (s1 s2 s3 : S), φ1(s1) -> φ2(s2) -> φ3(s3) -> φv(Merge (Merge s1 s2) s3)).
   Proof.
     intros.
-    destruct (merge_select s2 s3).
-    - apply H2; assumption.
-    - apply H1. assumption.
+    destruct (merge_select s1 s3); rewrite merge_comm; rewrite merge_assoc; rewrite (merge_comm s3 s1);
+      rewrite <- H6.
+    - apply H1; assumption.
+    - rewrite merge_comm. apply H2; assumption.
+  Qed.
 
   Example inconsistend_tetrad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
