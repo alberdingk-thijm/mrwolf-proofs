@@ -712,7 +712,7 @@ Section SelectiveNet.
     - apply contra.
   Qed.
 
-  Lemma fold_right_merge_idemp  {V S : Type} `{H: SelectiveNet V S}:
+  Lemma fold_right_merge_idemp {V S : Type} `{H: SelectiveNet V S}:
     forall s states,
       fold_right Merge s (s :: states) = fold_right Merge s states.
   Proof.
@@ -723,6 +723,17 @@ Section SelectiveNet.
       simpl in IHstates.
       rewrite IHstates.
       reflexivity.
+  Qed.
+
+  Lemma fold_right_merge_idemp_inner {V S : Type} `{H: SelectiveNet V S}:
+    forall s start states1 states2,
+      fold_right Merge start (states1 ++ s :: s :: states2) =
+        fold_right Merge start (states1 ++ s :: states2).
+  Proof.
+    intros.
+    induction states1.
+    - simpl. rewrite merge_assoc. rewrite <- merge_idempotent. reflexivity.
+    - simpl. rewrite IHstates1. reflexivity.
   Qed.
 
   Lemma fold_right_merge_init2 {V S : Type} `{H: SelectiveNet V S}:
@@ -898,17 +909,6 @@ Section SelectiveNet.
       apply H6. apply contra.
   Qed.
 
-  Lemma selective_inductive_cond_untimed_join_idemp {V S : Type} `{H: SelectiveNet V S}:
-    forall (u1 u2 v : V) (state1 state2 : S) (invv invu : φ S) (neighbors : list V) (states : list S) (invs : list (φ S)),
-      length neighbors = length states ->
-      length neighbors = length invs ->
-      inductive_cond_untimed v invv (combine (u1 :: u2 :: neighbors) (state1 :: state2 :: states)) (invu :: invu :: invs) ->
-      inductive_cond_untimed v invv (combine (u1 :: neighbors) (state1 :: states)) (invu :: invs).
-  Proof.
-    intros.
-  Abort.
-
-
   Lemma selective_neighbor_pairs_join {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       inductive_cond v neighbors1 ->
@@ -930,28 +930,6 @@ Section SelectiveNet.
     - apply Hneighbors1; symmetry; assumption.
     - apply Hneighbors2; symmetry; assumption.
   Qed.
-
-  Lemma selective_fail_overlap_fail_if_equal  {V S : Type} `{H: SelectiveNet V S}:
-    forall (u v : V) (invu invv : φ S) (neighbors1 neighbors2 : list V)
-      (stateu state1 state2 : S) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
-      length neighbors1 = length states1 ->
-      length neighbors1 = length invs1 ->
-      length neighbors2 = length states2 ->
-      length neighbors2 = length invs2 ->
-      state1 <> state2 ->
-      stateu = state1 \/ stateu = state2 ->
-      ~ inductive_cond_untimed v invv (combine (u :: neighbors1) (state1 :: states1)) (invu :: invs1) ->
-      ~ inductive_cond_untimed v invv (combine (u :: neighbors2) (state2 :: states2)) (invu :: invs2) ->
-      ~ inductive_cond_untimed v invv (combine (u :: (neighbors1 ++ neighbors2)) (stateu :: (states1 ++ states2))) (invu :: (invs1 ++ invs2)).
-  Proof.
-    intros u v invu invv neighbors1 neighbors2 stateu state1 state2 states1 states2 invs1 invs2.
-    intros Hlenstate1 Hleninvs1 Hlenstates2 Hleninvs2 Hstateneq Hstateu Hneighbors1 Hneighbors2.
-    repeat (apply imply_to_and in Hneighbors1; destruct Hneighbors1 as [? Hneighbors1]).
-    repeat (apply imply_to_and in Hneighbors2; destruct Hneighbors2 as [? Hneighbors2]).
-    destruct Hstateu; subst; intro contra.
-    -
-      unfold inductive_cond_untimed in *.
-  Abort.
 
   Lemma selective_neighbor_pairs_join_selective_neighbors_fail {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
