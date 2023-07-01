@@ -991,6 +991,31 @@ Section SelectiveNet.
         unfold updated_state in Hselect1. rewrite fold_right_merge_init2 in Hselect1.
     Abort.
 
+  Inductive Two_Combination { A : Type } : list A -> list (list A) -> Prop :=
+    | comb_nil : Two_Combination nil nil
+    | comb_singleton x : Two_Combination (x :: nil) nil
+    | comb_two x y l c :
+      Two_Combination l c ->
+      Two_Combination (x :: y :: l) ((x :: y :: nil) :: c).
+
+  Lemma selective_pairs_cover {V S : Type} `{H: SelectiveNet V S}:
+    forall (v : V) (inv : φ S)
+      (neighbor_pairs : list (list V)) (state_pairs : list (list S)) (inv_pairs : list (list (φ S)))
+      (neighbors : list V) (states : list S) (invs : list (φ S)),
+    Two_Combination neighbors neighbor_pairs ->
+    Two_Combination states state_pairs ->
+    Two_Combination invs inv_pairs ->
+    (* TODO: figure out what number of pairs need to pass/fail to conclude
+     something about the whole *)
+    Forall (fun (x : list V * list S * list (φ S)) =>
+              let (y, i) := x in let (n, s) := y in
+                  inductive_cond_untimed v inv (combine n s) i)
+      (combine (combine neighbor_pairs state_pairs) inv_pairs) ->
+    inductive_cond_untimed v inv (combine neighbors states) (invs).
+  Proof.
+    intros.
+  Abort.
+
 End SelectiveNet.
 
 Section SelectiveNetExamples.
