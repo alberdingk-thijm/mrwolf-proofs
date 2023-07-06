@@ -1,6 +1,18 @@
 (** Some useful lemmas of [combine] and [split], which we use extensively. *)
 Require Import Coq.Sorting.Permutation.
 Require Import Coq.Lists.List.
+Require Import Lia.
+
+Lemma combine_length3 :
+  forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (l3 : list T3),
+    length l1 = length l2 ->
+    length l1 = length l3 ->
+    length (combine l1 l2) = length l3.
+Proof.
+  intros.
+  rewrite combine_length.
+  lia.
+Qed.
 
 Lemma map_project_combine1 :
   forall {T1 T2 T3 : Type} (l1 : list T1) (l2 : list T2) (f : T1 -> T3),
