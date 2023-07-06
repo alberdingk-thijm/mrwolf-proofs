@@ -868,6 +868,61 @@ Section SelectiveNet.
       apply H6.
   Qed.
 
+  Lemma selective_inductive_cond_untimed_select_neighbor {V S : Type} `{H: SelectiveNet V S}:
+    forall (u v : V) (invu invv : φ S) (neighbors : list V) (state1 state2 : S) (states : list S) (invs : list (φ S)),
+      length neighbors = length states ->
+      length neighbors = length invs ->
+      inductive_cond_untimed v invv (combine (u :: u :: neighbors) (state1 :: state2 :: states)) (invu :: invu :: invs) ->
+      inductive_cond_untimed v invv (combine (u :: neighbors) (state1 :: states)) (invu :: invs) \/
+        inductive_cond_untimed v invv (combine (u :: neighbors) (state2 :: states)) (invu :: invs).
+  Proof.
+    intros.
+    destruct (merge_select (F u v state1) (F u v state2)).
+    - simpl in *.
+      left.
+      unfold inductive_cond_untimed in *.
+      intros.
+      simpl in H3.
+      rewrite combine_length in H3.
+      rewrite <- H1 in H3.
+      rewrite <- H2 in H3.
+      rewrite PeanoNat.Nat.min_id in H3.
+      specialize (H3 eq_refl).
+      repeat rewrite Forall2_cons_iff in H3.
+      inversion H6.
+      subst.
+      unfold updated_state in *.
+      simpl in *.
+      rewrite H4.
+      rewrite <- merge_assoc.
+      apply H3.
+      split; try split; try assumption.
+      (* need [invu state2] *)
+      admit.
+    - simpl in *.
+      right.
+      unfold inductive_cond_untimed in *.
+      intros.
+      simpl in H3.
+      rewrite combine_length in H3.
+      rewrite <- H1 in H3.
+      rewrite <- H2 in H3.
+      rewrite PeanoNat.Nat.min_id in H3.
+      specialize (H3 eq_refl).
+      repeat rewrite Forall2_cons_iff in H3.
+      inversion H6.
+      subst.
+      unfold updated_state in *.
+      simpl in *.
+      rewrite H4.
+      rewrite <- merge_assoc.
+      apply H3.
+      split; try split; try assumption.
+      (* need [invu state1] *)
+      admit.
+  Admitted.
+
+
   Lemma selective_inductive_cond_untimed_join_fail {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list V) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
       length neighbors1 = length states1 ->
