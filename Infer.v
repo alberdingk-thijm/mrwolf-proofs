@@ -869,25 +869,19 @@ Section SelectiveNet.
       unfold inductive_cond_untimed in *; intros; simpl in *;
       rewrite (combine_length3 _ _ _ H1 H2) in H3;
       specialize (H3 eq_refl);
-      repeat rewrite Forall2_cons_iff in H3.
+      repeat rewrite Forall2_cons_iff in H3;
+      unfold updated_state in *;
+      simpl in *;
+      rewrite merge_assoc in H3;
+      rewrite <- H4 in H3.
     - left.
       intros.
-      inversion H7.
-      subst.
-      unfold updated_state in *.
-      simpl in *.
-      rewrite H4.
-      rewrite <- merge_assoc.
+      inversion H7; subst.
       apply H3.
       split; try split; assumption.
     - right.
       intros.
-      inversion H7.
-      subst.
-      unfold updated_state in *.
-      simpl in *.
-      rewrite H4.
-      rewrite <- merge_assoc.
+      inversion H7; subst.
       apply H3.
       split; try split; assumption.
   Qed.
@@ -903,35 +897,27 @@ Section SelectiveNet.
     intros.
     destruct (merge_select (F u v state1) (F u v state2));
       unfold inductive_cond_untimed in *; intros; simpl in *;
-      repeat (apply imply_to_and in H3; destruct H3 as [? H3]).
+      repeat (apply imply_to_and in H3; destruct H3 as [? H3]);
+      unfold updated_state in *; simpl in *;
+      rewrite merge_assoc in H3; rewrite <- H4 in H3.
     - left.
       intros.
       intro contra.
       rewrite (combine_length3 _ _ _ H1 H2) in contra.
       specialize (contra eq_refl).
       apply H3.
-      inversion H6; inversion H12; subst.
-      unfold updated_state in *.
-      simpl in *.
-      rewrite merge_assoc.
-      rewrite <- H4.
       apply contra.
-      apply Forall2_cons_iff.
-      split; try split; assumption.
+      inversion H6; inversion H12; subst.
+      apply Forall2_cons; assumption.
     - right.
       intros.
       intro contra.
       rewrite (combine_length3 _ _ _ H1 H2) in contra.
       specialize (contra eq_refl).
       apply H3.
-      inversion H6; inversion H12; subst.
-      unfold updated_state in *.
-      simpl in *.
-      rewrite merge_assoc.
-      rewrite <- H4.
       apply contra.
-      apply Forall2_cons_iff.
-      split; try split; assumption.
+      inversion H6; inversion H12; subst.
+      apply Forall2_cons; assumption.
   Qed.
 
   Lemma selective_inductive_cond_untimed_join_fail {V S : Type} `{H: SelectiveNet V S}:
@@ -950,10 +936,7 @@ Section SelectiveNet.
     repeat (apply imply_to_and in H6; destruct H6 as [? H6]).
     intro contra.
     do 2 rewrite app_length in contra.
-    do 2 rewrite combine_length in contra.
-    rewrite <- H1, <- H3 in contra.
-    do 2 rewrite PeanoNat.Nat.min_id in contra.
-    rewrite H2, H4 in contra.
+    rewrite H7, H9 in contra.
     specialize (contra eq_refl).
     assert (HForallcombine:
            Forall2 (fun (m : V * S) (p : S -> Prop) => p (snd m))
