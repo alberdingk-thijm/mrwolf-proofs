@@ -628,55 +628,6 @@ Section SelectiveNet.
   Infix "⪯" := better_or_eq (at level 70).
   Infix "≺" := better (at level 70).
 
-  Definition better_inv {V S : Type} `{H: SelectiveNet V S} (φ1 φ2 : φ S) :=
-    forall s1 s2, φ1(s1) -> φ2(s2) -> φ1(Merge s1 s2).
-
-  Infix "⊑" := better_inv (at level 60).
-
-  Corollary better_inv_refl {V S : Type} `{H: SelectiveNet V S} :
-    forall (φ' : φ S), φ' ⊑ φ'.
-  Proof.
-    unfold better_inv.
-    intros.
-    destruct (merge_select s1 s2); congruence.
-  Qed.
-
-  Corollary better_inv_order {V S : Type} `{H: SelectiveNet V S} :
-    forall (φ1 φ2 : φ S),
-      φ1 ⊑ φ2 ->
-      (forall (s1 s2 : S), φ1 s1 -> φ2 s2 -> s1 ⪯ s2 \/ φ1(s2)).
-  Proof.
-    unfold better_inv.
-    intros.
-    destruct (merge_select s1 s2).
-    - rewrite merge_order in H4.
-      left. assumption.
-    - right. rewrite H4. apply H1; assumption.
-  Qed.
-
-  Corollary better_inv_trans {V S : Type} `{H: SelectiveNet V S} :
-    forall (φ1 φ2 φ3 : φ S), φ1 ⊑ φ2 -> φ2 ⊑ φ3 -> φ1 ⊑ φ3.
-  Proof.
-    intros φ1 φ2 φ3 H12 H23 s1 s3 H1 H3.
-    remember (better_inv_order φ1 φ2 H12) as Horder12.
-    remember (better_inv_order φ2 φ3 H23) as Horder23.
-
-    (* want to show that merging [s1] and [s3] produces a result satisfying [φ1];
-       we know that any in-between route [s2] that satisfies [φ2] will be better
-       than [s3], and [s1] will be better than that route [s2].
-     *)
-  Abort.
-
-  Example better_inv1 {V S : Type} `{H: SelectiveNet V S}:
-    forall (s1 s2 : S), s1 ⪯ s2 -> (fun s => s = s1) ⊑ (fun s => s = s2).
-  Proof.
-    unfold better_inv, better_or_eq.
-    intros.
-    subst.
-    symmetry. apply merge_order.
-    assumption.
-  Qed.
-
   Lemma fold_right_merge_In {V S : Type} `{H: SelectiveNet V S}:
     forall s states, In (fold_right Merge s states) (s :: states).
   Proof.
@@ -841,19 +792,15 @@ Section SelectiveNet.
     specialize (H5 (combine_length3 _ _ _ H1 H2) Hnbrs1).
     specialize (H6 (combine_length3 _ _ _ H3 H4) Hnbrs2).
     unfold updated_state, transfer_routes.
-    rewrite map_app.
-    fold (transfer_routes v (combine neighbors1 states1)).
-    fold (transfer_routes v (combine neighbors2 states2)).
+    rewrite map_app, <- fold_right_merge_init2.
+    (* refold everything *)
+    fold (transfer_routes v (combine neighbors1 states1));
+    fold (transfer_routes v (combine neighbors2 states2));
+    fold (updated_state v (combine neighbors1 states1));
+    fold (updated_state v (combine neighbors2 states2)).
     destruct (merge_select (updated_state v (combine neighbors1 states1))
-                           (updated_state v (combine neighbors2 states2))).
-    - rewrite H7 in H5.
-      unfold updated_state in H5.
-      rewrite fold_right_merge_init2 in H5.
-      apply H5.
-    - rewrite H7 in H6.
-      unfold updated_state in H6.
-      rewrite fold_right_merge_init2 in H6.
-      apply H6.
+                           (updated_state v (combine neighbors2 states2)));
+      rewrite <- H7; assumption.
   Qed.
 
   Lemma selective_inductive_cond_untimed_select_neighbor {V S : Type} `{H: SelectiveNet V S}:
@@ -920,7 +867,36 @@ Section SelectiveNet.
       apply Forall2_cons; assumption.
   Qed.
 
-  Lemma selective_inductive_cond_untimed_join_fail {V S : Type} `{H: SelectiveNet V S}:
+  Lemma selective_inductive_cond_untimed_join_converse {V S : Type} `{H: SelectiveNet V S}:
+    forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list V) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
+      length neighbors1 = length states1 ->
+      length neighbors1 = length invs1 ->
+      length neighbors2 = length states2 ->
+      length neighbors2 = length invs2 ->
+      inductive_cond_untimed v inv (combine neighbors1 states1 ++ combine neighbors2 states2) (invs1 ++ invs2) ->
+      (inductive_cond_untimed v inv (combine neighbors1 states1) invs1 /\
+      inductive_cond_untimed v inv (combine neighbors2 states2) invs2).
+  Proof.
+    intros.
+    unfold inductive_cond_untimed in *.
+    repeat rewrite app_length in H5.
+    rewrite (combine_length3 neighbors1 states1 invs1 H1 H2),
+      (combine_length3 neighbors2 states2 invs2 H3 H4) in H5.
+    specialize (H5 eq_refl).
+    unfold updated_state, transfer_routes in H5.
+    rewrite map_app in H5.
+    fold (transfer_routes v (combine neighbors1 states1)) in H5.
+    fold (transfer_routes v (combine neighbors2 states2)) in H5.
+    destruct (merge_select (updated_state v (combine neighbors1 states1))
+                           (updated_state v (combine neighbors2 states2))) as [Hselect1 | Hselect2].
+    - split; intros.
+      +
+        unfold updated_state in Hselect1; rewrite fold_right_merge_init2 in Hselect1.
+        rewrite <- Hselect1 in H5.
+        apply H5.
+        Abort.
+
+  Lemma selective_inductive_cond_untimed_join_neg {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (inv : φ S) (neighbors1 neighbors2 : list V) (states1 states2 : list S) (invs1 invs2 : list (φ S)),
       length neighbors1 = length states1 ->
       length neighbors1 = length invs1 ->
@@ -935,27 +911,24 @@ Section SelectiveNet.
     repeat (apply imply_to_and in H5; destruct H5 as [? H5]).
     repeat (apply imply_to_and in H6; destruct H6 as [? H6]).
     intro contra.
-    do 2 rewrite app_length in contra.
+    repeat rewrite app_length in contra.
     rewrite H7, H9 in contra.
-    specialize (contra eq_refl).
     assert (HForallcombine:
            Forall2 (fun (m : V * S) (p : S -> Prop) => p (snd m))
             (combine neighbors1 states1 ++ combine neighbors2 states2)
             (invs1 ++ invs2)).
     { apply List.Forall2_app; assumption. }
-    specialize (contra HForallcombine).
+    specialize (contra eq_refl HForallcombine).
     unfold updated_state, transfer_routes in contra.
     rewrite map_app in contra.
-    fold (transfer_routes v (combine neighbors1 states1)) in contra.
-    fold (transfer_routes v (combine neighbors2 states2)) in contra.
+    rewrite <- fold_right_merge_init2 in contra.
+    fold (transfer_routes v (combine neighbors1 states1)) in contra;
+    fold (transfer_routes v (combine neighbors2 states2)) in contra;
+    fold (updated_state v (combine neighbors1 states1)) in contra;
+    fold (updated_state v (combine neighbors2 states2)) in contra.
     destruct (merge_select (updated_state v (combine neighbors1 states1))
-                           (updated_state v (combine neighbors2 states2))) as [Hselect1 | Hselect2].
-    - unfold updated_state in Hselect1. rewrite fold_right_merge_init2 in Hselect1.
-      rewrite <- Hselect1 in contra.
-      apply H5. apply contra.
-    - unfold updated_state in Hselect2. rewrite fold_right_merge_init2 in Hselect2.
-      rewrite <- Hselect2 in contra.
-      apply H6. apply contra.
+                           (updated_state v (combine neighbors2 states2))) as [Hselect | Hselect];
+      rewrite <- Hselect in contra; congruence.
   Qed.
 
   Lemma selective_neighbor_pairs_join {V S : Type} `{H: SelectiveNet V S}:
@@ -980,7 +953,7 @@ Section SelectiveNet.
     - apply Hneighbors2; symmetry; assumption.
   Qed.
 
-  Lemma selective_neighbor_pairs_join_selective_neighbors_fail {V S : Type} `{H: SelectiveNet V S}:
+  Lemma selective_neighbor_pairs_join_selective_neighbors_neg {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       ~ inductive_cond v neighbors1 ->
       ~ inductive_cond v neighbors2 ->
@@ -1005,7 +978,7 @@ Section SelectiveNet.
       specialize (contra eq_refl).
       rewrite map_app in contra.
       rewrite combine_app in contra; try (symmetry; assumption).
-      apply (selective_inductive_cond_untimed_join_fail v (A v (1 + t1))
+      apply (selective_inductive_cond_untimed_join_neg v (A v (1 + t1))
               neighbors1 neighbors2 states1 states2
               (map (fun m => A m t1) neighbors1)
               (map (fun m => A m t1) neighbors2)) in contra;
@@ -1039,46 +1012,64 @@ Section SelectiveNet.
         rewrite map_app in contra.
         unfold updated_state in Hselect1. rewrite fold_right_merge_init2 in Hselect1.
     Abort.
-
-  Lemma selective_pairs_cover_pass {V S : Type} `{H: SelectiveNet V S}:
-    forall (v : V) (inv : φ S)
-      (cneighbors : list (list V)) (cstates : list (list S)) (cinvs : list (list (φ S)))
-      (neighbors : list V) (states : list S) (invs : list (φ S)),
-      incl neighbors (concat cneighbors) ->
-      incl states (concat cstates) ->
-      incl invs (concat cinvs) ->
-      False.
-  Proof.
-    Abort.
-
-  Inductive Two_Combination { A : Type } : list A -> list (list A) -> Prop :=
-    | comb_nil : Two_Combination nil nil
-    | comb_singleton x : Two_Combination (x :: nil) nil
-    | comb_two x y l c :
-      Two_Combination l c ->
-      Two_Combination (x :: y :: l) ((x :: y :: nil) :: c).
-
-  Lemma selective_pairs_cover {V S : Type} `{H: SelectiveNet V S}:
-    forall (v : V) (inv : φ S)
-      (neighbor_pairs : list (list V)) (state_pairs : list (list S)) (inv_pairs : list (list (φ S)))
-      (neighbors : list V) (states : list S) (invs : list (φ S)),
-    Two_Combination neighbors neighbor_pairs ->
-    Two_Combination states state_pairs ->
-    Two_Combination invs inv_pairs ->
-    (* TODO: figure out what number of pairs need to pass/fail to conclude
-     something about the whole *)
-    Forall (fun (x : list V * list S * list (φ S)) =>
-              let (y, i) := x in let (n, s) := y in
-                  inductive_cond_untimed v inv (combine n s) i)
-      (combine (combine neighbor_pairs state_pairs) inv_pairs) ->
-    inductive_cond_untimed v inv (combine neighbors states) (invs).
-  Proof.
-    intros.
-  Abort.
-
 End SelectiveNet.
 
-Section SelectiveNetExamples.
+Section SelectiveNetInv.
+  Definition better_inv {V S : Type} `{H: SelectiveNet V S} (φ1 φ2 : φ S) :=
+    forall s1 s2, φ1(s1) -> φ2(s2) -> φ1(Merge s1 s2).
+
+  Infix "⪯" := better_or_eq (at level 70).
+  Infix "≺" := better (at level 70).
+  Infix "⊑" := better_inv (at level 60).
+
+  Corollary better_inv_refl {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ' : φ S), φ' ⊑ φ'.
+  Proof.
+    unfold better_inv.
+    intros.
+    destruct (merge_select s1 s2); congruence.
+  Qed.
+
+  Corollary better_inv_order {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 : φ S),
+      φ1 ⊑ φ2 <->
+      (forall (s1 s2 : S), φ1 s1 -> φ2 s2 -> s1 ⪯ s2 \/ φ1(s2)).
+  Proof.
+    unfold better_inv.
+    intros.
+    split; intros.
+    - destruct (merge_select s1 s2).
+      + rewrite merge_order in H4.
+        left. assumption.
+      + right. rewrite H4. apply H1; assumption.
+    - specialize (H1 s1 s2 H2 H3).
+      destruct H1.
+      + apply merge_order in H1.
+        rewrite H1 in H2. assumption.
+      + destruct (merge_select s1 s2) as [H4 | H4]; rewrite <- H4; assumption.
+  Qed.
+
+  Corollary better_inv_trans {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 : φ S), φ1 ⊑ φ2 -> φ2 ⊑ φ3 -> forall s2, φ2(s2) -> φ1 ⊑ φ3.
+  Proof.
+    intros φ1 φ2 φ3 H12 H23 s2 H2 s1 s3 H1 H3.
+    (* We want to show that merging [s1] and [s3] produces a result satisfying [φ1];
+       we know that any in-between route [s2] that satisfies [φ2] will be better
+       than [s3], and [s1] will be better than that route [s2].
+       What is still needed though is some
+     *)
+  Abort.
+
+  Example better_inv1 {V S : Type} `{H: SelectiveNet V S}:
+    forall (s1 s2 : S), s1 ⪯ s2 -> (fun s => s = s1) ⊑ (fun s => s = s2).
+  Proof.
+    unfold better_inv, better_or_eq.
+    intros.
+    subst.
+    symmetry. apply merge_order.
+    assumption.
+  Qed.
+
   Example better_inv_pass {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φv : φ S),
       better_inv φ1 φ2 ->
@@ -1091,26 +1082,39 @@ Section SelectiveNetExamples.
     apply H1; assumption.
   Qed.
 
-  Example better_inv_fail {V S : Type} `{H: SelectiveNet V S} :
+  Example better_inv_fail_bad {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φv : φ S),
       ~ (better_inv φ1 φ2) ->
-      (exists (s2 : S), φ2(s2) /\ ~ (φv(s2))) ->
-      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ ~ (φv(Merge s1 s2))).
+      ~ (forall (s1 : S), φ1(s1) -> φv(s1)) ->
+      ~ (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)).
   Proof.
     intros.
-    destruct H2 as [s2 [Hs2 Hv2]].
-    apply not_all_ex_not in H1.
-    destruct H1 as [s1 H1].
-    apply not_all_ex_not in H1.
-    destruct H1 as [s2' H1].
-    apply not_all_ex_not in H1.
-    destruct H1 as [Hs1 H1].
-    apply not_all_ex_not in H1.
-    destruct H1 as [Hs2' H1].
-    exists (Merge s1 s2'). exists s2.
-    split; try split; try assumption.
+    rewrite better_inv_order in H1.
+    repeat (apply not_all_ex_not in H1; destruct H1 as [? H1]).
+    repeat (apply not_all_ex_not in H2; destruct H2 as [? H2]).
+    apply not_or_and in H1.
+    destruct H1.
+    rewrite <- merge_order in H1.
+    rename x into s1, x0 into s2, x3 into s1'.
+    assert (H1': s2 = Merge s1 s2) by
+      (destruct (merge_select s1 s2); (contradiction || assumption)).
+    rewrite <- H1' in H1.
+    intro contra.
+    destruct (merge_select s1' s2).
+    - apply H2. rewrite H4.
+      apply contra; assumption.
+    -
+      (* stuck! we can't go any further if [s2 ⪯ s1'],
+         as then we don't know if [~ φv s2]*)
   Abort.
 
+  Example better_inv_fail {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φv : φ S),
+      ~ (forall (s1 : S), φ1(s1) -> φv(s1)) ->
+      ~ (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)).
+End SelectiveNetInv.
+
+Section SelectiveNetExamples.
   Example triad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φv : φ S),
       (exists (s1 s3 : S), φ1(s1) /\ φ3(s3) /\ not (φv(Merge s1 s3))) ->
