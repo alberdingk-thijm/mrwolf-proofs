@@ -1157,7 +1157,7 @@ Section SelectiveNetInv.
     assumption.
   Qed.
 
-  Example better_inv_pass {V S : Type} `{H: SelectiveNet V S} :
+  Lemma better_inv_pass {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φv : φ S),
       better_inv φ1 φ2 ->
       (forall (s1 : S), φ1(s1) -> φv(s1)) ->
@@ -1172,27 +1172,38 @@ Section SelectiveNetInv.
   Example better_inv_fail_bad {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φv : φ S),
       ~ (better_inv φ1 φ2) ->
+      ~ (better_inv φ2 φ1) ->
       ~ (forall (s1 : S), φ1(s1) -> φv(s1)) ->
       ~ (forall (s1 s2 : S), φ1(s1) -> φ2(s2) -> φv(Merge s1 s2)).
   Proof.
     intros.
-    rewrite better_inv_order in H1.
+    rewrite better_inv_order in H1, H2.
     repeat (apply not_all_ex_not in H1; destruct H1 as [? H1]).
     repeat (apply not_all_ex_not in H2; destruct H2 as [? H2]).
-    apply not_or_and in H1.
-    destruct H1.
-    rewrite <- merge_order in H1.
-    rename x into s1, x0 into s2, x3 into s1'.
+    repeat (apply not_all_ex_not in H3; destruct H3 as [? H3]).
+    apply not_or_and in H1, H2.
+    destruct H1, H2.
+    rewrite <- merge_order in H1, H2.
+    rename x into s1, x0 into s2, x3 into s2', x4 into s1', x7 into s1''.
     assert (H1': s2 = Merge s1 s2) by
       (destruct (merge_select s1 s2); (contradiction || assumption)).
     rewrite <- H1' in H1.
+    assert (H1'': s1' = Merge s2' s1') by
+      (destruct (merge_select s2' s1'); (contradiction || assumption)).
+    rewrite <- H1'' in H2.
     intro contra.
-    destruct (merge_select s1' s2).
-    - apply H2. rewrite H4.
-      apply contra; assumption.
+    destruct (classic (φv s2)).
+    2: apply H6; rewrite H1'; apply contra; assumption.
+    apply H3.
+    assert (φ1 (Merge s1' s1'')) by (apply better_inv_refl; assumption).
+    assert (φ1 (Merge s1 (Merge s1' s1''))) by (apply better_inv_refl; assumption).
+    assert (φ2 (Merge s2 s2')) by (apply better_inv_refl; assumption).
+    specialize (contra s1'' s2 x8 x2).
+    destruct (merge_select s1'' s2).
+    - rewrite H10. assumption.
     -
-      (* stuck! we can't go any further if [s2 ⪯ s1'],
-         as then we don't know if [~ φv s2]*)
+      (* stuck! we can't go any further if [s2 ⪯ s1''],
+         as then we don't know if [~ φv s1'']*)
   Abort.
 
   Example better_inv_fail {V S : Type} `{H: SelectiveNet V S} :
