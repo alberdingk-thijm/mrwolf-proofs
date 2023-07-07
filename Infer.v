@@ -1093,33 +1093,23 @@ Section SelectiveNetExamples.
 
   Example better_inv_fail {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φv : φ S),
-      better_inv φ1 φ2 ->
-      (exists (s1 : S), φ1(s1) /\ ~ (φv(s1))) ->
+      ~ (better_inv φ1 φ2) ->
+      (exists (s2 : S), φ2(s2) /\ ~ (φv(s2))) ->
       (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ ~ (φv(Merge s1 s2))).
   Proof.
     intros.
-    unfold better_inv in H1.
-    destruct H2 as [s1 [Hs1 Hv1]].
-    unfold φ in *.
-    (* if [φ2] never returns true for any input,
-       then we should be able to derive a contradiction? *)
-    destruct (classic (forall (s2 : S), ~ φ2 s2)).
-    - admit.
-    - apply not_all_not_ex in H2.
-      destruct H2 as [s2 H2].
-      (* the problem is that we know that there is a particular [s1]
-         such that [~ φv s1], but we don't know if [Merge s1 s2 = s1]. *)
-      destruct (merge_select s1 s2).
-      + exists s1. exists s2.
-        repeat split; try assumption.
-        intro contra.
-        apply Hv1.
-        rewrite H3.
-        apply contra.
-      + (* We're now stuck. Unless [s2 = s1], we cannot use the fact
-           that [s1] failed to know that, when we chose [s2] over [s1],
-           the merge also failed. *)
-        Abort.
+    destruct H2 as [s2 [Hs2 Hv2]].
+    apply not_all_ex_not in H1.
+    destruct H1 as [s1 H1].
+    apply not_all_ex_not in H1.
+    destruct H1 as [s2' H1].
+    apply not_all_ex_not in H1.
+    destruct H1 as [Hs1 H1].
+    apply not_all_ex_not in H1.
+    destruct H1 as [Hs2' H1].
+    exists (Merge s1 s2'). exists s2.
+    split; try split; try assumption.
+  Abort.
 
   Example triad1 {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φv : φ S),
