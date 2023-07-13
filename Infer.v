@@ -1018,6 +1018,64 @@ Section SelectiveNet.
       rewrite <- Hselect in contra; congruence.
   Qed.
 
+  (* Return a list of overlapping lists. *)
+  Fixpoint windows {A : Type} (size : nat) (l : list A) : list (list A) :=
+    match size with
+      | 0 => nil
+      | S n => match l with
+                | nil => nil
+                | hd :: tl => (firstn size l) :: (windows size tl)
+              end
+    end.
+
+  Compute (windows 1 (1 :: 2 :: 3 :: nil)).
+  Compute (windows 2 (1 :: 2 :: 3 :: nil)).
+
+  Lemma windows_cons :
+    forall {A : Type} (size : nat) (l : list A) (a : A),
+      windows (S size) (a :: l) = (a :: (firstn size l)) :: (windows (S size) l).
+  Proof.
+    simpl.
+    reflexivity.
+  Qed.
+
+  Theorem pair_coverage_pass {V S : Type} `{H: SelectiveNet V S}:
+    forall (v : V) (inv : φ S) (neighbors : list V) (states : list S) (invariants : list (φ S)),
+      length neighbors > 1 ->
+      length neighbors = length invariants ->
+      length neighbors = length states ->
+      (* if we have a consistent chain of passing pairs... *)
+      Forall2 (fun ns i => inductive_cond_untimed v inv ns i)
+              (map (fun p => combine (fst p) (snd p)) (combine (windows 2 neighbors) (windows 2 states))) (windows 2 invariants) ->
+      (* then all neighbors pass *)
+      inductive_cond_untimed v inv (combine neighbors states) invariants.
+  Proof.
+    intros.
+    generalize dependent states.
+    generalize dependent invariants.
+    destruct neighbors as [| u1 neighbors]; try (simpl in H1; lia).
+    induction neighbors as [| u2 neighbors]; intros; try solve[simpl in H1; lia].
+    do 2 (destruct states as [| ? states]; try inversion H3).
+    do 2 (destruct invariants as [| ? invariants]; try inversion H2).
+    do 6 rewrite windows_cons in H4.
+    simpl.
+    replace (combine neighbors states) with (nil ++ combine neighbors states) by apply app_nil_l.
+    replace invariants with (nil ++ invariants) by apply app_nil_l.
+    do 4 rewrite app_comm_cons.
+    replace ((u1, s) :: (u2, s0) :: nil) with (combine (u1 :: u2 :: nil) (s :: s0 :: nil)) by reflexivity.
+    (* replace (combine ((a :: firstn 1 neighbors) :: windows 2 neighbors) *)
+    (*           ((s :: firstn 1 states) :: windows 2 states)) with *)
+    (*   (((a :: firstn 1 neighbors), (s :: firstn 1 states)) :: (combine (windows 2 neighbors) (windows 2 states))) *)
+    (*     in H3 by reflexivity. *)
+    simpl in H4.
+    do 2 (apply Forall2_cons_iff in H4; destruct H4 as [? H4]).
+    apply selective_inductive_cond_untimed_join; try (simpl; assumption || lia).
+    simpl (length (u1 :: neighbors)) in IHneighbors.
+    (* FIXME: something needs fixing in IHneighbors so we can get rid of [length neighbors > 1] *)
+    Fail apply IHneighbors; assumption.
+  Abort.
+
+
   Lemma selective_neighbor_pairs_join {V S : Type} `{H: SelectiveNet V S}:
     forall (v : V) (neighbors1 neighbors2 : list V),
       inductive_cond v neighbors1 ->
