@@ -265,6 +265,17 @@ Proof.
     split; eapply perm_trans; eassumption.
 Qed.
 
+Lemma Permutation_combine_split :
+  forall {T1 T2 : Type} (l1 l2 : list T1) (l3 l4 : list T2),
+    length l1 = length l3 ->
+    length l2 = length l4 ->
+    Permutation (combine l1 l3) (combine l2 l4) ->
+    Permutation l1 l2 /\ Permutation l3 l4.
+Proof.
+  intros.
+  eapply Permutation_split in H1; try apply combine_split; assumption.
+Qed.
+
 Lemma Permutation_combine_Exists :
   forall {T1 T2 : Type} (l1 l2 : list T1) (l3 : list T2),
     Permutation l1 l2 ->

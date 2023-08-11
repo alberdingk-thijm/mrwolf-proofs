@@ -327,24 +327,63 @@ Section Net.
     intros.
     unfold inductive_cond.
     split; intro.
-    - intros t states2 Hstateslen.
+    - intros t states2 Hstateslen2.
+      remember (map (fun m : V => A m t) neighbors2) as invs2.
+      remember (map (fun m : V => A m t) neighbors1) as invs1.
+     (* now we need to prove a series of lemmas about Permutations...
+         in particular, that there exists some [states1 : list S], such that
+         [length states1 = length neighbors1] and
+         [(combine (combine neighbors2 states2) invs2)] is a Permutation of
+         [(combine (combine neighbors1 states1) invs1)].
+         if this is the case, then we can prove the sub-cases that the components
+         are also Permutations
+       *)
       assert (Hstates1: exists (states1 : list S),
-                 Permutation states1 states2 /\
-                 Permutation (combine neighbors1 states1) (combine neighbors2 states2)).
+                 length states1 = length neighbors1 /\
+                 Permutation (combine (combine neighbors2 states2) invs2)
+                   (combine (combine neighbors1 states1) invs1)).
+      { eexists.
+        split.
+        - apply Permutation_length in H0.
+          rewrite H0.
+          rewrite <- Hstateslen2.
+          reflexivity.
+        -
+        admit. }
+      destruct Hstates1 as [states1 [Hstateslen1 Hcombine]].
+      rewrite Heqinvs2.
+      eapply inductive_cond_untimed_comm.
+      4: apply H1.
+      (* we can handle the [invs] case in goal 2 from the fact that the neighbors
+         are permutations of one another *)
+      2: apply Permutation_map; apply Permutation_sym; apply H0.
+      2: rewrite Heqinvs1, Heqinvs2 in Hcombine; apply Hcombine.
+      apply Permutation_combine_split in Hcombine;
+        try (rewrite combine_length; subst; rewrite map_length; lia).
+      destruct Hcombine.
+      apply H2.
+      apply Hstateslen1.
+    - intros t states1 Hstateslen1.
+      remember (map (fun m : V => A m t) neighbors2) as invs2.
+      remember (map (fun m : V => A m t) neighbors1) as invs1.
+      (* same process, but on the other side *)
+      assert (Hstates2: exists (states2 : list S),
+             length states2 = length neighbors2 /\
+             Permutation (combine (combine neighbors1 states1) invs1)
+               (combine (combine neighbors2 states2) invs2)).
       { admit. }
-      destruct Hstates1 as [states1 [Hstates1 Hcombine]].
-      apply (inductive_cond_untimed_comm v (A v (1 + t)) (combine neighbors1 states1)
-                (combine neighbors2 states2)
-             (map (fun m => A m t) neighbors1) (map (fun m => A m t) neighbors2)).
-      apply Hcombine.
-      apply Permutation_map.
-      apply H0.
-      2: apply H1; apply Permutation_length in H0, Hstates1; rewrite <- H0 in Hstateslen; congruence.
-      apply (Permutation_map (fun m => A m t)) in H0.
-      admit.
-    - intros t states1 Hstateslen.
-      admit.
-  Abort.
+      destruct Hstates2 as [states2 [Hstateslen2 Hcombine]].
+      rewrite Heqinvs1.
+      eapply inductive_cond_untimed_comm.
+      4: apply H1.
+      2: apply Permutation_map; apply H0.
+      3: apply Hstateslen2.
+      2: rewrite Heqinvs1, Heqinvs2 in Hcombine; apply Hcombine.
+      apply Permutation_combine_split in Hcombine;
+        try (rewrite combine_length; subst; rewrite map_length; lia).
+      destruct Hcombine.
+      apply H2.
+  Admitted.
 End Net.
 
 Section NetExamples.
