@@ -92,6 +92,24 @@ Proof.
   - simpl. rewrite IHl. reflexivity.
 Qed.
 
+(* Given an associative, commutative and idempotent function f,
+   fold_right with a duplicate element is the same as fold_right
+   without the duplicate. *)
+Lemma fold_right_idemp :
+  forall {T : Type} (x : T) (l : list T) (f : T -> T -> T),
+    (forall (x' : T), f x' x' = x') ->
+    (forall (a b : T), f a b = f b a) ->
+    (forall (a b c : T), f a (f b c) = f (f a b) c) ->
+    fold_right f x (x :: l) = fold_right f x l.
+Proof.
+  intros.
+  induction l.
+  - simpl. apply H.
+  - simpl in *.
+    rewrite (H0 a (fold_right f x l)), H1, IHl.
+    reflexivity.
+Qed.
+
 Lemma app_inv_Exists :
   forall {T1 T2 : Type} (l1 l2 : list T1) (l : list T2),
     length l = length (l1 ++ l2) ->
@@ -643,9 +661,10 @@ Section SelectiveNet.
   Qed.
 
   Lemma merge_idempotent {V S : Type} `{H: SelectiveNet V S} :
-    forall s, s = Merge s s.
+    forall s, Merge s s = s.
   Proof.
     intros.
+    symmetry.
     apply merge_order.
     apply preo.
   Qed.
@@ -667,66 +686,9 @@ Section SelectiveNet.
   Infix "⪯" := better_or_eq (at level 70).
   Infix "≺" := better (at level 70).
 
-  Lemma fold_right_merge_In {V S : Type} `{H: SelectiveNet V S}:
-    forall s states, In (fold_right Merge s states) (s :: states).
-  Proof.
-    intros.
-    induction states.
-    - simpl. left. reflexivity.
-    - simpl.
-      inversion IHstates.
-      + rewrite <- H1.
-        rewrite <- or_assoc.
-        left.
-        rewrite merge_comm.
-        apply merge_select.
-      + remember (merge_select a (fold_right Merge s states)) as Hselect.
-        destruct Hselect as [Ha | Hfold].
-        right. left. assumption.
-        right. right. rewrite <- Hfold. assumption.
-  Qed.
-
-  Lemma fold_right_merge_Forall_neg {V S : Type} `{H: SelectiveNet V S} :
-    forall s states P,
-      Forall (fun x => ~ P x) (s :: states) ->
-      ~ P (fold_right Merge s states).
-  Proof.
-    intros.
-    rewrite Forall_Exists_neg in H1.
-    rewrite Exists_exists in H1.
-    intro contra.
-    apply H1.
-    exists (fold_right Merge s states).
-    split.
-    - apply fold_right_merge_In.
-    - apply contra.
-  Qed.
-
-  Lemma fold_right_merge_idemp {V S : Type} `{H: SelectiveNet V S}:
-    forall s states,
-      fold_right Merge s (s :: states) = fold_right Merge s states.
-  Proof.
-    intros.
-    induction states.
-    - simpl. symmetry. apply merge_idempotent.
-    - simpl. rewrite (merge_comm a (fold_right Merge s states)). rewrite merge_assoc.
-      simpl in IHstates.
-      rewrite IHstates.
-      reflexivity.
-  Qed.
-
-  Lemma fold_right_merge_idemp_inner {V S : Type} `{H: SelectiveNet V S}:
-    forall s start states1 states2,
-      fold_right Merge start (states1 ++ s :: s :: states2) =
-        fold_right Merge start (states1 ++ s :: states2).
-  Proof.
-    intros.
-    induction states1.
-    - simpl. rewrite merge_assoc. rewrite <- merge_idempotent. reflexivity.
-    - simpl. rewrite IHstates1. reflexivity.
-  Qed.
-
-  Lemma fold_right_merge_init2 {V S : Type} `{H: SelectiveNet V S}:
+  (* the Merge of two Merges (with duplicate starting elements) over separate inputs
+     is the same as the Merge over the concatenation of the two inputs. *)
+  Lemma fold_right_merge_app {V S : Type} `{H: SelectiveNet V S}:
     forall s states1 states2,
       Merge (fold_right Merge s states1) (fold_right Merge s states2)
       = fold_right Merge s (states1 ++ states2).
@@ -735,81 +697,9 @@ Section SelectiveNet.
     induction states1; intros.
     - simpl.
       replace (Merge s (fold_right Merge s states2)) with (fold_right Merge s (s :: states2)) by reflexivity.
-      rewrite fold_right_merge_idemp.
+      rewrite (fold_right_idemp s states2 Merge merge_idempotent merge_comm merge_assoc).
       reflexivity.
     - simpl. rewrite <- merge_assoc. apply merge_inv_r. apply IHstates1.
-  Qed.
-
-  (* Proof that the result of merge is the best of all states. *)
-  Lemma selective_merge_best {V S : Type} `{H: SelectiveNet V S}:
-    forall s1 s2 states, In s2 (s1 :: states) -> (fold_right Merge s1 states) ⪯ s2.
-  Proof.
-    intros s1 s2 states.
-    induction states; intros Hin.
-    - inversion Hin.
-      + simpl. subst. apply preo.
-      + inversion H1.
-    - (* we now need to show that, if the best route is the merge of
-         s1, a and states, then all [s2] in [s1 :: a :: states] will be greater than best. *)
-      simpl.
-      apply merge_order.
-      rewrite <- merge_assoc.
-      assert (Hin_swap: In s2 (s1 :: a :: states) -> In s2 (a :: s1 :: states)).
-      { intro. inversion Hin. subst. apply in_cons. apply in_eq.
-        inversion H2. subst. apply in_eq. apply in_cons. apply in_cons. apply H3. }
-      apply Hin_swap in Hin.
-      inversion Hin.
-      + subst. symmetry. rewrite merge_comm. rewrite <- merge_assoc. rewrite <- merge_idempotent.
-        rewrite merge_comm. reflexivity.
-      + apply IHstates in H1.
-        apply merge_order in H1.
-        rewrite <- H1. reflexivity.
-  Qed.
-
-  Lemma selective_updated_state {V S : Type} `{H: SelectiveNet V S}:
-    forall v neighbors s states,
-      length neighbors = length states ->
-      (* every state received at the node... *)
-      In s ((I v) :: transfer_routes v (combine neighbors states)) ->
-      (* is at best equal to the updated state *)
-      (updated_state v (combine neighbors states)) ⪯ s.
-  Proof.
-    intros v neighbors s states Hstateslen Hin.
-    unfold updated_state.
-    apply selective_merge_best.
-    apply Hin.
-  Qed.
-
-  Corollary updated_state_chosen { V S : Type } `{H: SelectiveNet V S}:
-    forall v neighbors states,
-      length neighbors = length states ->
-      In (updated_state v (combine neighbors states)) ((I v) :: transfer_routes v (combine neighbors states)).
-  Proof.
-    intros.
-    unfold updated_state.
-    apply fold_right_merge_In.
-  Qed.
-
-  Lemma selective_inductive_cond_selects {V S : Type} `{H: SelectiveNet V S}:
-    forall (v : V) (node_invariant : φ S) (neighbors : list V) (states : list S) (invariants : list (φ S)),
-      length neighbors = length states ->
-      length neighbors = length invariants ->
-      (* if the inductive condition holds for the given set of invariants... *)
-      inductive_cond_untimed v node_invariant (combine neighbors states) invariants ->
-      Forall2 (fun s p => p (snd s)) (combine neighbors states) invariants  ->
-      (* then there exists a state from a particular node that satisfies the invariant and is selected *)
-      Exists node_invariant
-        ((I v) :: transfer_routes v (combine neighbors states)).
-  Proof.
-    intros.
-    unfold inductive_cond_untimed in H3.
-    specialize (H3 (combine_length3 neighbors states invariants H1 H2) H4).
-    apply Exists_exists.
-    exists (updated_state v (combine neighbors states)).
-    split; try assumption.
-    (* show that the updated state is one of the choices *)
-    apply updated_state_chosen.
-    apply H1.
   Qed.
 
   Lemma selective_inductive_cond_untimed_join {V S : Type} `{H: SelectiveNet V S}:
@@ -831,7 +721,7 @@ Section SelectiveNet.
     specialize (H5 (combine_length3 _ _ _ H1 H2) Hnbrs1).
     specialize (H6 (combine_length3 _ _ _ H3 H4) Hnbrs2).
     unfold updated_state, transfer_routes.
-    rewrite map_app, <- fold_right_merge_init2.
+    rewrite map_app, <- fold_right_merge_app.
     (* refold everything *)
     fold (transfer_routes v (combine neighbors1 states1));
     fold (transfer_routes v (combine neighbors2 states2));
@@ -865,7 +755,7 @@ Section SelectiveNet.
     destruct H9 as [Hnbrs1 Hnbrs2].
     unfold updated_state, transfer_routes.
     simpl.
-    rewrite map_app, <- fold_right_merge_init2.
+    rewrite map_app, <- fold_right_merge_app.
     fold (transfer_routes v (combine neighbors1 states1));
     fold (transfer_routes v (combine neighbors2 states2));
     fold (updated_state v (combine neighbors1 states1));
@@ -905,7 +795,7 @@ Section SelectiveNet.
     { apply List.Forall2_app; assumption. }
     unfold updated_state, transfer_routes.
     simpl.
-    rewrite map_app, <- fold_right_merge_init2.
+    rewrite map_app, <- fold_right_merge_app.
     fold (transfer_routes v (combine neighbors1 states1));
     fold (transfer_routes v (combine neighbors2 states2));
     fold (updated_state v (combine neighbors1 states1));
@@ -1017,7 +907,7 @@ Section SelectiveNet.
                            (updated_state v (combine neighbors2 states2))) as [Hselect1 | Hselect2].
     - split; intros.
       +
-        unfold updated_state in Hselect1; rewrite fold_right_merge_init2 in Hselect1.
+        unfold updated_state in Hselect1; rewrite fold_right_merge_app in Hselect1.
         rewrite <- Hselect1 in H5.
         apply H5.
         Abort.
@@ -1047,7 +937,7 @@ Section SelectiveNet.
     specialize (contra eq_refl HForallcombine).
     unfold updated_state, transfer_routes in contra.
     rewrite map_app in contra.
-    rewrite <- fold_right_merge_init2 in contra.
+    rewrite <- fold_right_merge_app in contra.
     fold (transfer_routes v (combine neighbors1 states1)) in contra;
     fold (transfer_routes v (combine neighbors2 states2)) in contra;
     fold (updated_state v (combine neighbors1 states1)) in contra;
@@ -1194,7 +1084,7 @@ Section SelectiveNet.
         specialize (contra eq_refl eq_refl).
         unfold updated_state, transfer_routes in contra.
         rewrite map_app in contra.
-        unfold updated_state in Hselect1. rewrite fold_right_merge_init2 in Hselect1.
+        unfold updated_state in Hselect1. rewrite fold_right_merge_app in Hselect1.
     Abort.
 End SelectiveNet.
 
