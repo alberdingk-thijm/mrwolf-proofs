@@ -1390,4 +1390,27 @@ Section SelectiveNetExamples.
       destruct (merge_select s3 s4); rewrite <- H4; assumption.
   Qed.
 
+  Lemma no_P4_graphs {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φ4 φv : φ S),
+      (* if the path [φ1 φ2 φ3 φ4] exists... *)
+      (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ not (φv(Merge s1 s2))) ->
+      (exists (s2 s3 : S), φ2(s2) /\ φ3(s3) /\ not (φv(Merge s2 s3))) ->
+      (exists (s3 s4 : S), φ3(s3) /\ φ4(s4) /\ not (φv(Merge s3 s4))) ->
+      (* ...then there must be another edge in the induced subgraph *)
+      (exists (s1 s3 : S), φ1(s1) /\ φ3(s3) /\ not (φv(Merge s1 s3))) \/
+      (exists (s1 s4 : S), φ1(s1) /\ φ4(s4) /\ not (φv(Merge s1 s4))) \/
+      (exists (s2 s4 : S), φ2(s2) /\ φ4(s4) /\ not (φv(Merge s2 s4))).
+  Proof.
+    intros.
+    destruct H1 as [s1 [s2 [Hs1 [Hs2 Hs12]]]].
+    destruct H2 as [s2' [s3 [Hs2' [Hs3 Hs23]]]].
+    destruct H3 as [s3' [s4 [Hs3' [Hs4 Hs34]]]].
+    destruct (merge_select s1 s3).
+    - destruct (merge_select s1 s2).
+      + left. exists s1. exists s3. repeat split; try assumption.
+        intro contra.
+        rewrite <- H1 in contra.
+        rewrite <- H2 in Hs12.
+        auto.
+  Abort.
 End SelectiveNetExamples.
