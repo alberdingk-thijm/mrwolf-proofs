@@ -669,13 +669,31 @@ Section SelectiveNet.
     apply preo.
   Qed.
 
+  Lemma merge_transitive {V S : Type} `{H: SelectiveNet V S} :
+    forall (s1 s2 s3 : S),
+      s1 = Merge s1 s2 ->
+      s2 = Merge s2 s3 ->
+      s1 = Merge s1 s3.
+  Proof.
+    intros.
+    apply merge_order.
+    apply merge_order in H1, H2.
+    eapply preo.
+    apply H1.
+    apply H2.
+  Qed.
+
+  Lemma merge_antisym {V S : Type} `{H: SelectiveNet V S} :
+    forall s1 s2, s1 = Merge s1 s2 -> s2 = Merge s1 s2 -> s1 = s2.
+  Proof. congruence. Qed.
+
   Lemma merge_inv_l {V S : Type} `{H: SelectiveNet V S} :
     forall s1 s2 s3, s1 = s3 -> Merge s1 s2 = Merge s3 s2.
-  Proof. intros. congruence. Qed.
+  Proof. congruence. Qed.
 
   Lemma merge_inv_r {V S : Type} `{H: SelectiveNet V S}:
     forall s1 s2 s3, s2 = s3 -> Merge s1 s2 = Merge s1 s3.
-  Proof. intros. congruence. Qed.
+  Proof. congruence. Qed.
 
   Definition better_or_eq {V S : Type} `{H: SelectiveNet V S} (s1 s2 : S) :=
     R s1 s2.
@@ -1390,7 +1408,53 @@ Section SelectiveNetExamples.
       destruct (merge_select s3 s4); rewrite <- H4; assumption.
   Qed.
 
-  Lemma no_P4_graphs {V S : Type} `{H: SelectiveNet V S} :
+  (* Proof that we can't have a P4 path of passing pairwise arrangements. *)
+  Lemma no_P4_graphs_pass {V S : Type} `{H: SelectiveNet V S} :
+    forall (φ1 φ2 φ3 φ4 φv : φ S) (s1 s2 s3 s4 : S),
+      (* if the path [φ1 φ2 φ3 φ4] exists... *)
+      φ1(s1) -> φ2(s2) -> φ3(s3) -> φ4(s4) ->
+      φv(Merge s1 s2) -> φv(Merge s2 s3) -> φv(Merge s3 s4) ->
+      (* ...then there must be another edge in the induced subgraph *)
+      φv(Merge s1 s3) \/ φv(Merge s1 s4) \/ φv(Merge s2 s4).
+  Proof.
+    intros.
+    destruct (merge_select s1 s2);
+      destruct (merge_select s2 s3);
+      destruct (merge_select s3 s4);
+      destruct (merge_select s1 s3);
+      destruct (merge_select s1 s4);
+      destruct (merge_select s2 s4);
+      try solve[rewrite <- H11, H8; left; assumption];
+      try solve[rewrite <- H11, H9; left; assumption];
+      try solve[rewrite <- H11, H10; left; assumption];
+      try solve[rewrite <- H12, H8; right; left; assumption];
+      try solve[rewrite <- H12, H9; right; left; assumption];
+      try solve[rewrite <- H12, H10; right; left; assumption];
+      try solve[rewrite <- H13, H8; right; right; assumption];
+      try solve[rewrite <- H13, H9; right; right; assumption];
+      try solve[rewrite <- H13, H10; right; right; assumption].
+    - (* cases where we have a loop *)
+      assert (s2 = Merge s2 s4) by (apply (merge_transitive s2 s3 s4 H9 H10)).
+      assert (s2 = s4) by (apply (merge_antisym s2 s4 H14 H13)); subst.
+      right; left; assumption.
+    -
+      assert (s2 = Merge s2 s4) by (apply (merge_transitive s2 s3 s4 H9 H10)).
+      assert (s2 = s4) by (apply (merge_antisym s2 s4 H14 H13)); subst.
+      right; left; assumption.
+    - (* [s3 ⪯ s2 ⪯ s1 ⪯ s3] *)
+      rewrite merge_comm in H8.
+      assert (s2 = Merge s2 s3) by (apply (merge_transitive s2 s1 s3 H8 H11)).
+      assert (s2 = s3) by (apply (merge_antisym s2 s3 H14 H9)); subst.
+      left; assumption.
+    -
+      rewrite merge_comm in H8.
+      assert (s2 = Merge s2 s3) by (apply (merge_transitive s2 s1 s3 H8 H11)).
+      assert (s2 = s3) by (apply (merge_antisym s2 s3 H14 H9)); subst.
+      left; assumption.
+  Qed.
+
+  (* Proof that we can't have a P4 path of failing pairwise arrangements. *)
+  Lemma no_P4_graphs_fail {V S : Type} `{H: SelectiveNet V S} :
     forall (φ1 φ2 φ3 φ4 φv : φ S),
       (* if the path [φ1 φ2 φ3 φ4] exists... *)
       (exists (s1 s2 : S), φ1(s1) /\ φ2(s2) /\ not (φv(Merge s1 s2))) ->
@@ -1405,12 +1469,61 @@ Section SelectiveNetExamples.
     destruct H1 as [s1 [s2 [Hs1 [Hs2 Hs12]]]].
     destruct H2 as [s2' [s3 [Hs2' [Hs3 Hs23]]]].
     destruct H3 as [s3' [s4 [Hs3' [Hs4 Hs34]]]].
-    destruct (merge_select s1 s3).
-    - destruct (merge_select s1 s2).
-      + left. exists s1. exists s3. repeat split; try assumption.
-        intro contra.
-        rewrite <- H1 in contra.
-        rewrite <- H2 in Hs12.
-        auto.
-  Abort.
+    (* now let's consider all the possible relevant orderings *)
+    destruct (merge_select s1 s2);
+      destruct (merge_select s2' s3);
+      destruct (merge_select s3' s4).
+    - destruct (merge_select s1 s3');
+        left; exists s1; exists s3'; repeat split; try assumption.
+      + rewrite <- H4, H1; assumption.
+      + rewrite <- H4, H3; assumption.
+    - destruct (merge_select s1 s4);
+        right; left; exists s1; exists s4; repeat split; try assumption.
+      + rewrite <- H4, H1; assumption.
+      + rewrite <- H4, H3; assumption.
+    - destruct (merge_select s1 s3);
+        left; exists s1; exists s3; repeat split; try assumption.
+      + rewrite <- H4, H1; assumption.
+      + rewrite <- H4, H2; assumption.
+    - destruct (merge_select s1 s3);
+        left; exists s1; exists s3; repeat split; try assumption.
+      + rewrite <- H4, H1; assumption.
+      + rewrite <- H4, H2; assumption.
+    - destruct (merge_select s2 s4).
+      + right; right; exists s2; exists s4; repeat split; try assumption.
+        rewrite <- H4, H1; assumption.
+      + (* [s3' ⪯ s4 ⪯ s2 ⪯ s1] *)
+        assert (s4 = Merge s4 s1) by
+          (apply (merge_transitive s4 s2 s1);
+              try (assumption || rewrite merge_comm; assumption)).
+        assert (s3' = Merge s3' s1) by
+          (apply (merge_transitive s3' s4 s1);
+              try (assumption || rewrite merge_comm; assumption)).
+        left; exists s1; exists s3'; repeat split; try assumption.
+        rewrite merge_comm, <- H6, H3; assumption.
+    - destruct (merge_select s2 s4).
+      + right; right; exists s2; exists s4; repeat split; try assumption.
+        rewrite <- H4, H1; assumption.
+      + (* [s4 ⪯ s2 ⪯ s1] *)
+        assert (s4 = Merge s4 s1) by
+          (apply (merge_transitive s4 s2 s1);
+              try (assumption || rewrite merge_comm; assumption)).
+        right; left; exists s1; exists s4; repeat split; try assumption.
+        rewrite merge_comm, <- H5, H3; assumption.
+    - destruct (merge_select s2 s3').
+      + assert (s2 = Merge s2 s4) by
+          (apply (merge_transitive s2 s3' s4);
+              try (assumption || rewrite merge_comm; assumption)).
+        right; right; exists s2; exists s4; repeat split; try assumption.
+        rewrite <- H5, H1; assumption.
+      + assert (s3' = Merge s3' s1) by
+          (apply (merge_transitive s3' s2 s1);
+              try (assumption || rewrite merge_comm; assumption)).
+        left; exists s1; exists s3'; repeat split; try assumption.
+        rewrite merge_comm, <- H5, H3; assumption.
+    - destruct (merge_select s2 s4);
+        right; right; exists s2; exists s4; repeat split; try assumption.
+      + rewrite <- H4, H1; assumption.
+      + rewrite <- H4, H3; assumption.
+  Qed.
 End SelectiveNetExamples.
